@@ -2,18 +2,32 @@
 #   npm version patch   (bumps package.json, makes tag vX.Y.Z)
 #   git push --follow-tags
 # Installed apps then auto-update from that release.
+#
+# One draft release is created first so the Windows and Mac builds upload into the SAME release
+# (if each build made its own, they race and you end up with two releases for one tag).
 name: Release
 
 on:
   push:
     tags: ['v*']
-  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
+  draft:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$TAG" -R "$GITHUB_REPOSITORY" --draft --title "Lychee ${TAG#v}" --notes "Lychee ${TAG#v}"
+
   build:
+    needs: draft
     strategy:
       fail-fast: false
       matrix:
@@ -30,8 +44,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build and publish
+      - name: Build and upload to the draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false' # unsigned builds (no paid certificate)
         run: npx electron-builder --${{ matrix.os == 'macos-latest' && 'mac' || 'win' }} --publish always
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --draft=false --latest
