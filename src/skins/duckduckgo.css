@@ -1,0 +1,246 @@
+/* Lychee skin for DuckDuckGo. Injected by Lychee into duckduckgo.com pages.
+   {{ACCENT}}, {{INK}} and {{FONT}} are filled in at runtime. DuckDuckGo builds its theme from
+   CSS variables, so this mostly re-points those; class names on their site are scrambled. */
+@font-face {
+  font-family: 'Lychee Sans';
+  font-style: normal;
+  font-weight: 1 1000;
+  font-display: block;
+  src: url({{FONT}}) format('woff2-variations');
+}
+
+:root, html.dark-bg, html.set-theme--dark, html.set-theme--terminal {
+  --lychee-accent: {{ACCENT}};
+  --lychee-ink: {{INK}};
+  --lychee-bg: {{P.bg}};
+  --lychee-bg2: {{P.bg2}};
+  --lychee-surface: {{P.surface}};
+  --lychee-surface2: {{P.surface2}};
+  --lychee-surface3: {{P.surface3}};
+  --lychee-border: {{P.border}};
+  --lychee-border2: {{P.border2}};
+  --lychee-text: {{P.text}};
+  --lychee-muted: {{P.muted}};
+  --lychee-font: 'Lychee Sans', 'Segoe UI', system-ui, sans-serif;
+
+  /* fonts */
+  --default-font: var(--lychee-font) !important;
+  --ducksans-product-font-family: var(--lychee-font) !important;
+  --ducksans-display-font-family: var(--lychee-font) !important;
+  --ducksans-product-letter-spacing: 0 !important;
+
+  /* design-system colours */
+  --ds-accent-primary: var(--lychee-accent) !important;
+  --sds-color-background-01: var(--lychee-bg) !important;
+  --sds-color-background-02: var(--lychee-bg2) !important;
+  --sds-color-background-03: var(--lychee-surface) !important;
+  --sds-color-background-container-01: var(--lychee-surface) !important;
+  --sds-color-background-utility: var(--lychee-surface2) !important;
+  --sds-color-background-utility-state-01: var(--lychee-surface3) !important;
+  --sds-color-background-utility-alt: var(--lychee-surface2) !important;
+  --sds-color-background-utility-alt-state-01: var(--lychee-surface3) !important;
+  --sds-color-background-accent-01: var(--lychee-accent) !important;
+  --sds-color-background-accent-01-alt: color-mix(in srgb, var(--lychee-accent) 18%, transparent) !important;
+  --sds-color-background-accent-02: var(--lychee-accent) !important;
+  --sds-color-text-accent-01: var(--lychee-accent) !important;
+  --sds-color-text-accent-01-alt: var(--lychee-accent) !important;
+  --sds-color-text-accent-02: var(--lychee-accent) !important;
+  --sds-color-text-on-color: var(--lychee-ink) !important;
+  --sds-color-text-link-01: var(--lychee-accent) !important;
+  --sds-color-text-link-02: var(--lychee-accent) !important;
+  --sds-color-text-link-02-hover: color-mix(in srgb, var(--lychee-accent) 75%, #fff) !important;
+  --sds-color-text-link-01-visited: color-mix(in srgb, var(--lychee-accent) 55%, #b69cff) !important;
+  --sds-color-text-01: var(--lychee-text) !important;
+  --sds-color-text-primary: var(--lychee-text) !important;
+  --sds-color-text-02: var(--lychee-muted) !important;
+  --sds-color-border-01: var(--lychee-border2) !important;
+  --sds-color-border-subtle: var(--lychee-border) !important;
+  --sds-color-border-inner-divider: var(--lychee-border) !important;
+  --sds-color-border-accent-01: var(--lychee-accent) !important;
+
+  /* legacy theme colours */
+  --theme-col-bg-page: var(--lychee-bg) !important;
+  --theme-col-bg-page-transparent: transparent !important;
+  --theme-col-bg-page-alt-1: var(--lychee-surface2) !important;
+  --theme-col-bg-page-alt-2: var(--lychee-surface) !important;
+  --theme-col-bg-page-alt-3: var(--lychee-bg2) !important;
+  --theme-col-bg-header: var(--lychee-bg) !important;
+  --theme-col-bg-header-transparent: transparent !important;
+  --theme-col-bg-header-modal: var(--lychee-surface) !important;
+  --theme-col-header-divider: var(--lychee-border) !important;
+  --theme-col-metabar-bg: var(--lychee-bg) !important;
+  --theme-col-metabar-transparent: transparent !important;
+  --theme-col-bg-search: var(--lychee-surface) !important;
+  --theme-col-txt-search-input: var(--lychee-text) !important;
+  --theme-col-bg-card: var(--lychee-surface) !important;
+  --theme-col-bg-card-header: var(--lychee-surface2) !important;
+  --theme-col-bg-ui: var(--lychee-surface) !important;
+  --theme-col-bg-ui-active: var(--lychee-surface3) !important;
+  --theme-col-border-ui: var(--lychee-border) !important;
+  --theme-col-bg-ext-dropdown: var(--lychee-surface) !important;
+  --theme-col-bg-modal: var(--lychee-surface) !important;
+  --theme-col-modal-border: var(--lychee-border2) !important;
+  --theme-col-bg-textarea: var(--lychee-surface) !important;
+  --theme-col-bg-pill: var(--lychee-surface3) !important;
+  --theme-col-bg-expandcollapse: var(--lychee-surface2) !important;
+  --theme-col-bg-expandcollapse-hover: var(--lychee-surface3) !important;
+  --theme-col-bg-button-expandcollapse: var(--lychee-surface3) !important;
+  --theme-col-bg-button-qna: var(--lychee-surface2) !important;
+  --theme-col-bg-button-qna-hover: var(--lychee-surface3) !important;
+  --theme-col-bg-button-tab: var(--lychee-surface3) !important;
+  --theme-col-bg-button-tab-active: var(--lychee-accent) !important;
+  --theme-col-txt-button-tab-active: var(--lychee-ink) !important;
+  --theme-col-border-large-tab-selected: var(--lychee-accent) !important;
+  --theme-col-bg-button-primary: var(--lychee-accent) !important;
+  --theme-col-bg-button-primary-hover: color-mix(in srgb, var(--lychee-accent) 85%, #fff) !important;
+  --theme-col-bg-button-primary-active: color-mix(in srgb, var(--lychee-accent) 80%, #000) !important;
+  --theme-col-txt-button-primary: var(--lychee-ink) !important;
+  --theme-col-bg-button-secondary: var(--lychee-surface3) !important;
+  --theme-col-bg-button-secondary-hover: {{P.border2}} !important;
+  --theme-col-txt-button-ghost: var(--lychee-accent) !important;
+  --theme-col-txt-button-ghost-hover: color-mix(in srgb, var(--lychee-accent) 75%, #fff) !important;
+  --theme-col-separator: var(--lychee-border) !important;
+  --theme-col-separator-active: var(--lychee-border2) !important;
+  --theme-col-bg-result-item-divider: var(--lychee-bg) !important;
+  --theme-col-txt-title: var(--lychee-accent) !important;
+  --theme-col-txt-title-visited: color-mix(in srgb, var(--lychee-accent) 55%, #b69cff) !important;
+  --theme-col-txt-snippet: {{P.text}} !important;
+  --theme-col-txt-url: var(--lychee-muted) !important;
+  --theme-col-txt-url-domain: {{P.text}} !important;
+  --theme-col-txt-url-path: var(--lychee-muted) !important;
+  --theme-col-about-link: var(--lychee-accent) !important;
+  --theme-col-module-link-new-ux: var(--lychee-accent) !important;
+  --theme-col-glow: color-mix(in srgb, var(--lychee-accent) 25%, transparent) !important;
+  --theme-col-bg-txt-1: var(--lychee-text) !important;
+  --theme-col-bg-txt-2: {{P.text}} !important;
+  --theme-col-txt-card: var(--lychee-text) !important;
+  --theme-col-txt-card-title: var(--lychee-text) !important;
+  --theme-col-txt-card-body: {{P.text}} !important;
+  --theme-col-txt-card-aside: var(--lychee-muted) !important;
+  --theme-col-sitefilter-enabled-card-bg: color-mix(in srgb, var(--lychee-accent) 18%, transparent) !important;
+  --col-result-focus-outline: var(--lychee-accent) !important;
+  --about-card-fill: var(--lychee-surface) !important;
+}
+
+/* a few wrappers hard-code DuckDuckGo's greys instead of using variables */
+html { background-color: var(--lychee-bg) !important; }
+.site-wrapper, .region__body, #web_content_wrapper, #vertical_wrapper {
+  background-color: transparent !important;
+}
+.header-wrap, #header_wrapper {
+  background-color: color-mix(in srgb, var(--lychee-bg) 88%, transparent) !important;
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--lychee-border) !important;
+}
+.footer { background-color: var(--lychee-bg) !important; }
+
+html, body {
+  font-family: var(--lychee-font) !important;
+}
+html body, body.body--serp, body.body--home {
+  background-color: var(--lychee-bg) !important;
+  background-image: radial-gradient(circle, rgba(255, 255, 255, .05) 1px, transparent 1.2px) !important;
+  background-size: 24px 24px !important;
+  background-attachment: fixed !important;
+}
+::selection { background: color-mix(in srgb, var(--lychee-accent) 40%, transparent); }
+
+/* header: the search bar gets the Lychee omnibox look */
+[data-testid="search-form-input-wrapper"], .search__input--adv, form#search_form > div {
+  background: var(--lychee-surface) !important;
+  border: 1px solid var(--lychee-border2) !important;
+  border-radius: 14px !important;
+  box-shadow: none !important;
+}
+[data-testid="search-form-input-wrapper"]:focus-within {
+  border-color: color-mix(in srgb, var(--lychee-accent) 50%, transparent) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lychee-accent) 16%, transparent) !important;
+}
+
+/* swap the duck for the Lychee logo + wordmark (results still come from DuckDuckGo, see Settings > About) */
+.header__search-wrap { padding-left: 136px !important; } /* room for logo + wordmark (DuckDuckGo reserves 88px for the duck) */
+a[data-testid="header-logo"] { width: auto !important; display: flex !important; align-items: center; gap: 7px; text-decoration: none !important; }
+a[data-testid="header-logo"] > * { display: none !important; }
+a[data-testid="header-logo"]::before {
+  content: '';
+  width: 28px; height: 28px; flex: none;
+  background: url({{LOGO}}) center / contain no-repeat;
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--lychee-accent) 55%, transparent));
+}
+a[data-testid="header-logo"]::after {
+  content: 'Lychee';
+  font: 650 23px/1 var(--lychee-font);
+  letter-spacing: -1px;
+  color: var(--lychee-accent);
+  text-shadow: 0 0 18px color-mix(in srgb, var(--lychee-accent) 55%, transparent);
+  padding-right: 10px;
+}
+
+/* results */
+a[data-testid="result-title-a"] { font-weight: 600 !important; }
+article[data-testid="result"] { border-radius: 14px; }
+#more-results {
+  background: var(--lychee-surface) !important;
+  border: 1px solid var(--lychee-border2) !important;
+  border-radius: 12px !important;
+  color: var(--lychee-text) !important;
+}
+#more-results:hover { border-color: color-mix(in srgb, var(--lychee-accent) 50%, transparent) !important; }
+
+/* rounded Lychee-style cards for the info boxes */
+[data-testid="about-redesign"] > div, section[data-testid="sidebar"] > div > div {
+  border-radius: 16px !important;
+}
+
+/* ---------- images: clicking one opens a Google-style sidebar on the right ----------
+   DuckDuckGo renders the detail view as an <aside> inside the image grid (scrambled classes,
+   so this targets it by structure). It becomes a fixed panel and the grid makes room for it. */
+[data-testid="zci-images"] ol > li > div > aside {
+  position: fixed !important;
+  top: var(--lychee-header-h, 104px) !important; right: 0 !important; bottom: 0 !important; left: auto !important;
+  width: min(42vw, 640px) !important; height: auto !important;
+  z-index: 1000 !important;
+  background: var(--lychee-surface) !important;
+  border-left: 1px solid var(--lychee-border2) !important;
+  box-shadow: -30px 0 60px -30px rgba(0, 0, 0, .8) !important;
+  overflow: hidden !important;
+  animation: lycheeSlideIn .24s cubic-bezier(.2, .8, .2, 1);
+}
+@keyframes lycheeSlideIn { from { transform: translateX(100%); } to { transform: none; } }
+[data-testid="zci-images"] ol > li > div > aside > div,
+[data-testid="zci-images"] ol > li > div > aside > div > div:last-child { height: 100% !important; }
+/* prev / next / more / close buttons */
+[data-testid="zci-images"] ol > li > div > aside > div > div:first-child {
+  top: 14px !important; right: 14px !important; left: auto !important; z-index: 3 !important;
+}
+/* each slide: image on top, details underneath */
+[data-testid="zci-images"] ol > li > div > aside > div > div:last-child > div {
+  flex: 0 0 100% !important; width: 100% !important; min-width: 100% !important; height: 100% !important;
+  flex-direction: column !important; align-items: stretch !important; justify-content: flex-start !important;
+  gap: 18px; padding: 64px 24px 24px !important; overflow-y: auto !important;
+}
+[data-testid="zci-images"] ol > li > div > aside > div > div:last-child > div > div:first-child {
+  width: 100% !important; max-width: none !important; height: auto !important; max-height: 60vh !important;
+  justify-content: center !important; padding: 0 !important; margin: 0 !important;
+}
+[data-testid="zci-images"] ol > li > div > aside > div > div:last-child > div > div:first-child a {
+  width: 100% !important; height: auto !important; max-height: 60vh !important;
+  display: flex !important; justify-content: center; border-radius: 14px; overflow: hidden;
+}
+[data-testid="zci-images"] ol > li > div > aside > div > div:last-child > div > div:first-child img {
+  width: auto !important; height: auto !important; max-width: 100% !important; max-height: 60vh !important;
+  object-fit: contain !important; border-radius: 14px;
+}
+[data-testid="zci-images"] ol > li > div > aside > div > div:last-child > div > div:last-child {
+  width: 100% !important; max-width: none !important; margin: 0 !important; padding: 0 !important;
+}
+body:has([data-testid="zci-images"] ol > li > div > aside) [data-testid="zci-images"] section {
+  margin-right: min(42vw, 640px) !important;
+}
+
+/* ---------- AI chat is switched off for now (see FOR NOW.md) ---------- */
+#react-ai-button-slot, a[href*="ia=chat"], a[href*="duck.ai"], [data-testid="ask"] { display: none !important; }
+
+/* DuckDuckGo's "try our browser" promos make no sense inside another browser */
+[data-testid="serp-popover-promo"], [data-testid="floating-feedback-prompt"],
+.js-sidebar-ads, .badge-link--serp, [class*="browserPromo"], [class*="BrowserPromo"] { display: none !important; }

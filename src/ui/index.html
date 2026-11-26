@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; img-src * data: blob:; style-src 'self' file: 'unsafe-inline'; font-src 'self' file:; script-src 'self' file:">
+<title>Lychee</title>
+<link rel="stylesheet" href="../shared/base.css">
+<link rel="stylesheet" href="ui.css">
+<script src="../shared/icons.js"></script>
+<script src="../shared/themes.js"></script>
+<script src="../shared/effects.js"></script>
+</head>
+<body>
+<canvas id="fx" aria-hidden="true"></canvas>
+<div id="lights" aria-hidden="true" hidden></div>
+<nav id="rail">
+  <button class="rail-btn" data-page="home" title="Home (Alt+Home)"><i data-icon="home"></i></button>
+  <button class="rail-btn" data-page="bookmarks" title="Bookmarks"><i data-icon="bookmark"></i></button>
+  <button class="rail-btn" data-page="history" title="History (Ctrl+H)"><i data-icon="history"></i></button>
+  <button class="rail-btn" data-page="downloads" title="Downloads (Ctrl+J)"><i data-icon="download"></i><span id="rail-dl-dot" hidden></span></button>
+  <div class="rail-spacer"></div>
+  <button class="rail-btn" id="rail-private" title="New private tab (Ctrl+Shift+N)"><i data-icon="eyeOff"></i></button>
+  <button class="rail-btn" id="rail-tor" title="New Tor tab (Alt+Shift+N)"><i data-icon="onion"></i><span id="rail-tor-dot" hidden></span></button>
+  <button class="rail-btn" id="rail-panic" title="Panic"><i data-icon="siren"></i></button>
+  <button class="rail-btn" data-page="settings" title="Settings (Ctrl+,)"><i data-icon="sliders"></i><span id="rail-update-dot" hidden></span></button>
+</nav>
+
+<header id="top">
+  <div id="strip">
+    <div id="tabs"></div>
+    <button id="newtab" title="New tab (Ctrl+T)"><i data-icon="plus"></i></button>
+    <div class="strip-fill"></div>
+  </div>
+
+  <div id="toolbar">
+    <button class="tb" id="back" title="Back (Alt+Left)"><i data-icon="left"></i></button>
+    <button class="tb" id="fwd" title="Forward (Alt+Right)"><i data-icon="right"></i></button>
+    <button class="tb" id="reload" title="Reload (Ctrl+R)"></button>
+    <div id="omni">
+      <span id="kind-badge" hidden></span>
+      <span id="omni-icon"></span>
+      <input id="omni-input" spellcheck="false" autocomplete="off" placeholder="Search or type a URL">
+      <button id="zoom-badge" hidden title="Reset zoom"></button>
+      <button id="star" title="Bookmark this page (Ctrl+D)"><i data-icon="star"></i></button>
+    </div>
+    <button class="tb wide" id="shield"></button>
+    <button class="tb" id="dl-btn" title="Downloads (Ctrl+J)">
+      <svg class="ring" viewBox="0 0 36 36" hidden><circle cx="18" cy="18" r="15"/></svg>
+      <i data-icon="download"></i>
+    </button>
+  </div>
+
+  <div id="findbar" hidden>
+    <div id="find-box">
+      <i data-icon="search"></i>
+      <input id="find-input" spellcheck="false" placeholder="Find in page">
+      <span id="find-count"></span>
+    </div>
+    <button class="tb" id="find-prev" title="Previous (Shift+Enter)"><i data-icon="up"></i></button>
+    <button class="tb" id="find-next" title="Next (Enter)"><i data-icon="down"></i></button>
+    <button class="tb" id="find-close" title="Close (Esc)"><i data-icon="x"></i></button>
+  </div>
+</header>
+
+<script src="ui.js"></script>
+</body>
+</html>

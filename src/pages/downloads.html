@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' * data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>Downloads</title>
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/pages.css">
+<script src="/shared/icons.js"></script>
+<script src="/shared/themes.js"></script>
+<script src="/shared/effects.js"></script>
+<script src="/shared/page.js"></script>
+</head>
+<body>
+<main class="page">
+  <header class="page-head">
+    <div class="head-icon"><i data-icon="download"></i></div>
+    <div><h1>Downloads</h1><p class="sub" id="sub">Files save straight to your Downloads folder</p></div>
+    <div class="head-actions">
+      <button class="btn" id="folder"><i data-icon="folder"></i>Open folder</button>
+      <button class="btn danger" id="clear"><i data-icon="trash"></i>Clear list</button>
+    </div>
+  </header>
+  <div class="toolbar-row">
+    <label class="field"><i data-icon="search"></i><input id="q" placeholder="Search downloads" spellcheck="false"></label>
+  </div>
+  <div id="list" class="dl-list"></div>
+  <p class="empty" id="empty" hidden></p>
+</main>
+<script src="downloads.js"></script>
+</body>
+</html>

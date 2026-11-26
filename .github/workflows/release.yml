@@ -1,0 +1,37 @@
+# Builds Lychee for Windows and Mac and publishes a GitHub Release when you push a version tag:
+#   npm version patch   (bumps package.json, makes tag vX.Y.Z)
+#   git push --follow-tags
+# Installed apps then auto-update from that release.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false' # unsigned builds (no paid certificate)
+        run: npx electron-builder --${{ matrix.os == 'macos-latest' && 'mac' || 'win' }} --publish always

@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lychee · a browser that's actually yours</title>
+<meta name="description" content="Lychee is a free, dark, themeable Chromium browser with live seasonal themes, a built-in ad blocker, YouTube upgrades and privacy tools. For Windows and Mac.">
+<meta property="og:title" content="Lychee browser">
+<meta property="og:description" content="Free, themeable Chromium browser for Windows and Mac. Live effects, ad blocking, YouTube Ambient Light, private and Tor tabs.">
+<meta property="og:image" content="img/home-lychee.png">
+<meta name="theme-color" content="#0f0a0b">
+<link rel="icon" type="image/png" href="img/icon.png">
+<link rel="stylesheet" href="style.css">
+<script src="js/themes.js"></script>
+<script src="js/effects.js"></script>
+</head>
+<body>
+<canvas id="fx" aria-hidden="true"></canvas>
+<div id="glow" aria-hidden="true"></div>
+
+<header class="nav">
+  <a class="brand" href="#"><img src="img/icon.png" alt="" width="28" height="28">Lychee</a>
+  <nav>
+    <a href="#features">Features</a>
+    <a href="#themes">Themes</a>
+    <a href="#download">Download</a>
+    <a href="#faq">FAQ</a>
+  </nav>
+  <a class="btn primary small" href="#download">Download</a>
+</header>
+
+<main>
+  <!-- hero -->
+  <section class="hero">
+    <div class="pill"><span class="dot"></span><span id="version-pill">Free for Windows &amp; Mac</span></div>
+    <h1 class="wordmark">Lychee</h1>
+    <p class="lead">A real Chromium browser that's actually fun to use. Live seasonal themes, a built-in ad blocker, YouTube upgrades and privacy tools, all in one dark, glowing package.</p>
+    <div class="cta">
+      <a class="btn primary big" id="hero-dl" href="#download"><span class="ico">↓</span><span id="hero-dl-text">Download Lychee</span></a>
+      <a class="btn big ghost" href="#features">See what it does</a>
+    </div>
+    <p class="small muted" id="hero-sub">Windows 10/11 · macOS 11+ · No account, no tracking</p>
+    <figure class="shot hero-shot">
+      <img src="img/home-lychee.png" alt="Lychee's home page in the classic pink Lychee theme" id="hero-img">
+    </figure>
+  </section>
+
+  <!-- features -->
+  <section id="features" class="section">
+    <h2>Everything built in</h2>
+    <p class="section-lead">No extensions to hunt down. Lychee ships with the good stuff.</p>
+    <div class="grid">
+      <article class="card feat">
+        <div class="ficon">✦</div>
+        <h3>Live seasonal themes</h3>
+        <p>Classic Lychee pink out of the box, plus snow and string lights at Christmas, falling leaves in autumn, bats in October and cherry blossoms in spring. Turn on Seasonal and it switches by itself.</p>
+      </article>
+      <article class="card feat">
+        <div class="ficon">▶</div>
+        <h3>YouTube, upgraded</h3>
+        <p>Ambient Light makes the video glow around the player. YouTube follows your Lychee theme, and ads get muted and skipped.</p>
+      </article>
+      <article class="card feat">
+        <div class="ficon">⌕</div>
+        <h3>Lychee Search</h3>
+        <p>Private search with no tracking, styled to match your theme, with a Google-style image sidebar. Your address bar shows what you searched, not a messy link.</p>
+      </article>
+      <article class="card feat">
+        <div class="ficon">⛨</div>
+        <h3>Ad &amp; tracker blocker</h3>
+        <p>Blocks ads and trackers on every site out of the box, using the same filter lists the big blockers use. One click to turn it off for a page.</p>
+      </article>
+      <article class="card feat">
+        <div class="ficon">◐</div>
+        <h3>Private &amp; Tor tabs</h3>
+        <p>Private tabs leave no history or cookies behind. Tor tabs route through the Tor network to hide your IP. HTTPS-only mode and encrypted DNS come switched on.</p>
+      </article>
+      <article class="card feat">
+        <div class="ficon">⚡</div>
+        <h3>Panic key &amp; disguise</h3>
+        <p>One key jumps to a boring page and mutes everything; press it again to come back. Disguise the window as Docs or Classroom in the taskbar.</p>
+      </article>
+      <article class="card feat">
+        <div class="ficon">⟳</div>
+        <h3>Updates itself</h3>
+        <p>New versions download quietly in the background and install when you restart. The portable version updates itself too.</p>
+      </article>
+      <article class="card feat">
+        <div class="ficon">⌂</div>
+        <h3>A home page you'll like</h3>
+        <p>Big search, your shortcuts, a clock, recent sites and your own wallpaper if you want. Tabs, bookmarks, history and downloads all feel the same.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- themes -->
+  <section id="themes" class="section">
+    <h2>Try the themes right here</h2>
+    <p class="section-lead">This page is running Lychee's real theme engine. Pick one.</p>
+    <div class="theme-picker" id="theme-picker"></div>
+    <div class="gallery">
+      <figure class="shot"><img src="img/home-christmas.png" alt="Lychee home page with the Christmas theme and falling snow" loading="lazy"><figcaption>Christmas: snow on every page, lights on the tab bar</figcaption></figure>
+      <figure class="shot"><img src="img/search.png" alt="Lychee Search results in the Christmas theme" loading="lazy"><figcaption>Lychee Search matches your theme</figcaption></figure>
+      <figure class="shot"><img src="img/themes.png" alt="Lychee's theme settings with eight themes" loading="lazy"><figcaption>Eight themes plus seasonal auto mode</figcaption></figure>
+      <figure class="shot"><img src="img/frame-christmas.png" alt="Lychee's tab strip with Christmas lights" loading="lazy"><figcaption>Twinkling lights across the tabs</figcaption></figure>
+    </div>
+  </section>
+
+  <!-- download -->
+  <section id="download" class="section">
+    <h2>Download Lychee</h2>
+    <p class="section-lead" id="dl-version">Free, forever. Pick your system.</p>
+    <div class="dl-grid">
+      <article class="card dl" data-os="win">
+        <div class="os">Windows</div>
+        <h3>Installer</h3>
+        <p>Installs just for you: no admin password needed. Updates itself automatically.</p>
+        <a class="btn primary" data-file="Lychee-Setup.exe">Download for Windows</a>
+        <span class="small muted">Windows 10 &amp; 11 · 64-bit</span>
+      </article>
+      <article class="card dl" data-os="win">
+        <div class="os">Windows</div>
+        <h3>Portable</h3>
+        <p>Unzip anywhere, even a USB stick, and run Lychee.exe. Your settings stay in its Profile folder.</p>
+        <a class="btn" data-file="Lychee-Portable-win.zip">Download portable .zip</a>
+        <span class="small muted">Nothing installed · updates itself</span>
+      </article>
+      <article class="card dl" data-os="mac">
+        <div class="os">macOS</div>
+        <h3>Mac app</h3>
+        <p>One app for both Apple Silicon and Intel Macs. Lychee tells you when a new version is out.</p>
+        <a class="btn" data-file="Lychee-mac.dmg">Download for Mac</a>
+        <span class="small muted">macOS 11 or newer · Universal</span>
+      </article>
+    </div>
+
+    <div class="card help">
+      <h3>First launch: "unknown publisher"?</h3>
+      <p>Lychee is free and made by one person, so it isn't signed with a paid certificate yet. Your computer will ask once:</p>
+      <div class="help-cols">
+        <div>
+          <b>Windows</b>
+          <ol><li>"Windows protected your PC" appears.</li><li>Click <b>More info</b>.</li><li>Click <b>Run anyway</b>. That's it, it won't ask again.</li></ol>
+        </div>
+        <div>
+          <b>Mac</b>
+          <ol><li>Open the .dmg and drag Lychee into Applications.</li><li>Open Lychee. If macOS says it can't be checked, open <b>System Settings → Privacy &amp; Security</b>.</li><li>Click <b>Open Anyway</b> next to Lychee.</li></ol>
+        </div>
+      </div>
+    </div>
+    <p class="small muted center">All releases and changelogs are on <a id="releases-link" href="#">GitHub</a>.</p>
+  </section>
+
+  <!-- faq -->
+  <section id="faq" class="section narrow">
+    <h2>Questions</h2>
+    <details class="card"><summary>Is it really a full browser?</summary><p>Yes. Lychee runs on Chromium, the same engine as Chrome, Edge, Brave and Opera, so sites work like they do in Chrome. Lychee adds its own interface, themes and tools on top.</p></details>
+    <details class="card"><summary>Does Lychee track me?</summary><p>No. There's no account, no analytics and no telemetry. Your history, bookmarks and settings stay on your computer. Lychee only contacts GitHub to check for updates, and you can turn that off.</p></details>
+    <details class="card"><summary>Is it free?</summary><p>Completely. No ads (it blocks them), no premium tier.</p></details>
+    <details class="card"><summary>Why does it say "unknown publisher"?</summary><p>Code-signing certificates cost money every year. Lychee isn't signed yet, so Windows and macOS ask you to confirm once. See the steps above.</p></details>
+    <details class="card"><summary>Can I take it on a USB stick?</summary><p>Yes, grab the Windows portable .zip. Everything, including your logins and settings, lives in the Profile folder next to Lychee.exe.</p></details>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="brand"><img src="img/icon.png" alt="" width="22" height="22">Lychee</div>
+  <p class="small muted">Built on Chromium via Electron. Lychee Search is a modded DuckDuckGo; results come from DuckDuckGo. Ad blocking uses the Ghostery adblocker engine with EasyList and EasyPrivacy. Fonts: Google Sans Flex (SIL OFL). Lychee isn't affiliated with Google, YouTube, DuckDuckGo or the Tor Project.</p>
+</footer>
+
+<script src="js/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,106 @@
+{
+  "name": "lychee",
+  "version": "0.1.0",
+  "description": "Lychee: a dark, themeable Chromium browser with built-in safety tools",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "selftest": "electron . --selftest",
+    "icon": "node tools/make-icon.js",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:mac": "electron-builder --mac --publish never",
+    "release": "electron-builder --publish always"
+  },
+  "author": "MangoOnFork",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "electron": "^45.5.0",
+    "electron-builder": "^26.18.0"
+  },
+  "dependencies": {
+    "@fontsource-variable/google-sans-code": "^5.3.2",
+    "@fontsource-variable/google-sans-flex": "^5.3.2",
+    "@ghostery/adblocker-electron": "^2.20.3",
+    "electron-updater": "^6.8.11"
+  },
+  "productName": "Lychee",
+  "homepage": "https://mangoonfork.github.io/lychee/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MangoOnFork/lychee.git"
+  },
+  "build": {
+    "appId": "com.lychee.browser",
+    "productName": "Lychee",
+    "copyright": "Copyright © 2026 MangoOnFork",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json",
+      "!src/selftest.js"
+    ],
+    "asar": true,
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Lychee-Portable-win.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": false,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "Lychee-Setup.${ext}",
+      "shortcutName": "Lychee"
+    },
+    "mac": {
+      "icon": "build/icon.png",
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "artifactName": "Lychee-mac.${ext}",
+      "identity": null,
+      "hardenedRuntime": false
+    },
+    "dmg": {
+      "artifactName": "Lychee-mac.${ext}",
+      "title": "Lychee"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "MangoOnFork",
+        "repo": "lychee",
+        "releaseType": "release"
+      }
+    ]
+  }
+}

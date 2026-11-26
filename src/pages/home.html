@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' * data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>Home</title>
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/pages.css">
+<script src="/shared/icons.js"></script>
+<script src="/shared/themes.js"></script>
+<script src="/shared/effects.js"></script>
+<script src="/shared/page.js"></script>
+</head>
+<body data-fx="full">
+<main class="home">
+  <section class="hero">
+    <h1 class="wordmark">Lychee</h1>
+    <div class="kind-banner" id="kind-banner" hidden></div>
+    <form id="search" class="searchbox" autocomplete="off">
+      <i data-icon="search"></i>
+      <input id="q" placeholder="Search for anything!" autofocus spellcheck="false">
+      <button class="go" title="Search"><i data-icon="right"></i></button>
+    </form>
+    <div id="tiles" class="tiles"></div>
+    <div class="pills">
+      <span class="pill"><i data-icon="shieldCheck"></i><b id="ads">0</b> ads &amp; trackers blocked</span>
+      <button class="pill" id="engine-pill"><i data-icon="search"></i><span id="engine"></span></button>
+      <button class="pill" id="theme-pill" title="Change theme"><i data-icon="palette"></i><span id="theme-name"></span></button>
+    </div>
+  </section>
+
+  <section id="clock" class="clock-card card" hidden>
+    <div class="time" id="time"></div>
+    <div class="date" id="date"></div>
+  </section>
+
+  <section class="recent" id="recent-sec" hidden>
+    <h2>Jump back in</h2>
+    <div id="recent" class="recent-grid"></div>
+  </section>
+</main>
+
+<dialog id="dlg">
+  <form method="dialog" id="dlg-form">
+    <h2 id="dlg-title">Add shortcut</h2>
+    <label for="dlg-name">Name</label>
+    <div class="field"><input id="dlg-name" required maxlength="40" spellcheck="false"></div>
+    <label for="dlg-url">URL</label>
+    <div class="field"><input id="dlg-url" required spellcheck="false" placeholder="example.com"></div>
+    <div class="actions">
+      <button type="button" class="btn" id="dlg-cancel">Cancel</button>
+      <button class="btn primary" id="dlg-save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="home.js"></script>
+</body>
+</html>

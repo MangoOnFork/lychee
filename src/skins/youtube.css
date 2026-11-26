@@ -1,0 +1,57 @@
+/* Lychee theme for YouTube. {{ACCENT}}, {{INK}}, {{P.*}} come from the active Lychee theme.
+   YouTube's dark mode is built from --yt-sys-color-baseline--* tokens (older parts still read --yt-spec-*). */
+:root, html[dark], html[dark] ytd-app, ytd-app, [dark] {
+  --yt-sys-color-baseline--base-background: {{P.bg}} !important;
+  --yt-sys-color-baseline--raised-background: {{P.surface}} !important;
+  --yt-sys-color-baseline--menu-background: {{P.surface2}} !important;
+  --yt-sys-color-baseline--additive-background: color-mix(in srgb, {{P.text}} 9%, transparent) !important;
+  --yt-sys-color-baseline--button-chip-background-hover: color-mix(in srgb, {{P.text}} 18%, transparent) !important;
+  --yt-sys-color-baseline--outline: {{P.border2}} !important;
+  --yt-sys-color-baseline--text-primary: {{P.text}} !important;
+  --yt-sys-color-baseline--text-secondary: {{P.muted}} !important;
+  --yt-sys-color-baseline--call-to-action: {{ACCENT}} !important;
+  --yt-sys-color-baseline--static-brand-red: {{ACCENT}} !important;
+  --yt-sys-color-baseline--inverted-background: {{P.text}} !important;
+  --yt-sys-color-baseline--text-primary-inverse: {{P.bg}} !important;
+  --yt-sys-color-baseline--frost-container-medium: color-mix(in srgb, {{P.bg}} 70%, transparent) !important;
+
+  --yt-spec-base-background: {{P.bg}} !important;
+  --yt-spec-raised-background: {{P.surface}} !important;
+  --yt-spec-menu-background: {{P.surface2}} !important;
+  --yt-spec-general-background-a: {{P.bg}} !important;
+  --yt-spec-general-background-b: {{P.bg2}} !important;
+  --yt-spec-general-background-c: {{P.surface}} !important;
+  --yt-spec-brand-background-solid: {{P.bg}} !important;
+  --yt-spec-brand-background-primary: color-mix(in srgb, {{P.bg}} 98%, transparent) !important;
+  --yt-spec-text-primary: {{P.text}} !important;
+  --yt-spec-text-secondary: {{P.muted}} !important;
+  --yt-spec-call-to-action: {{ACCENT}} !important;
+  --yt-spec-static-brand-red: {{ACCENT}} !important;
+  --yt-spec-outline: {{P.border2}} !important;
+  --yt-spec-badge-chip-background: color-mix(in srgb, {{P.text}} 9%, transparent) !important;
+}
+html, body { background-color: {{P.bg}} !important; }
+::selection { background: color-mix(in srgb, {{ACCENT}} 40%, transparent); }
+
+/* the red progress bar, scrubber and volume become your accent */
+.ytp-play-progress, .ytp-swatch-background-color, .ytProgressBarLineProgressBarPlayed,
+.ytp-chapter-hover-container .ytp-play-progress {
+  background: linear-gradient(90deg, {{ACCENT}} 80%, color-mix(in srgb, {{ACCENT}} 60%, #fff)) !important;
+}
+.ytp-scrubber-button, .ytp-swatch-background-color-secondary, .ytProgressBarPlayheadProgressBarPlayheadDot {
+  background: {{ACCENT}} !important;
+}
+.ytp-settings-button.ytp-hd-quality-badge::after, .ytp-settings-button.ytp-4k-quality-badge::after { background-color: {{ACCENT}} !important; }
+
+/* selected chips ("All", "Music"...) and the search box */
+yt-chip-cloud-chip-renderer[selected] #chip-container,
+yt-chip-cloud-chip-renderer.iron-selected #chip-container,
+chip-shape button[aria-selected="true"] {
+  background: {{ACCENT}} !important;
+  color: {{INK}} !important;
+}
+#masthead-container #background { background: color-mix(in srgb, {{P.bg}} 92%, transparent) !important; }
+ytd-searchbox #container.ytd-searchbox, .ytSearchboxComponentInputBox {
+  background: {{P.surface}} !important;
+  border-color: {{P.border2}} !important;
+}

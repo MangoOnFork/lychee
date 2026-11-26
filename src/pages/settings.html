@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' * data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>Settings</title>
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/pages.css">
+<script src="/shared/icons.js"></script>
+<script src="/shared/themes.js"></script>
+<script src="/shared/effects.js"></script>
+<script src="/shared/page.js"></script>
+</head>
+<body>
+<main class="page" style="max-width:1000px">
+  <header class="page-head">
+    <div class="head-icon"><i data-icon="sliders"></i></div>
+    <div><h1>Settings</h1><p class="sub">Make it yours</p></div>
+  </header>
+
+  <div class="settings">
+    <nav class="snav">
+      <a href="#safety"><i data-icon="shieldCheck"></i>Safety</a>
+      <a href="#search"><i data-icon="search"></i>Search</a>
+      <a href="#look"><i data-icon="palette"></i>Appearance</a>
+      <a href="#youtube"><i data-icon="play"></i>YouTube</a>
+      <a href="#privacy"><i data-icon="shield"></i>Privacy</a>
+      <a href="#network"><i data-icon="network"></i>Network</a>
+      <a href="#startup"><i data-icon="power"></i>Startup &amp; downloads</a>
+      <a href="#about"><i data-icon="info"></i>About</a>
+    </nav>
+
+    <div>
+      <section class="sec card" id="safety">
+        <h2>Safety</h2>
+        <p class="desc">Panic button, disguise, private and Tor tabs, and leaving no trace.</p>
+
+        <div class="opt">
+          <div class="txt">
+            <div class="lbl">Panic key</div>
+            <div class="hint">Instantly jumps to a safe page, mutes every tab and hides the others from the tab strip. Press it again to come back.</div>
+          </div>
+          <div class="row-actions">
+            <span class="keycap" id="panic-key"></span>
+            <button class="btn" id="panic-change"><i data-icon="keyboard"></i>Change</button>
+          </div>
+        </div>
+        <div class="opt" style="display:block">
+          <div class="lbl">Panic page</div>
+          <form class="proxy-row" id="panic-form">
+            <label class="field"><i data-icon="siren"></i><input id="panic-url" spellcheck="false" placeholder="https://classroom.google.com/"></label>
+            <button class="btn primary">Save</button>
+            <button class="btn" type="button" id="panic-test">Test</button>
+          </form>
+        </div>
+
+        <div class="opt" style="display:block">
+          <div class="lbl">Window disguise</div>
+          <div class="hint">Changes the window title and taskbar icon, so Alt+Tab and the taskbar show something boring.</div>
+          <div class="chips" id="disguise" style="padding-bottom:4px"></div>
+        </div>
+
+        <div class="opt">
+          <div class="txt">
+            <div class="lbl">Private and Tor tabs</div>
+            <div class="hint">
+              Private tabs keep no history, cookies or cache. Tor tabs also route everything through the Tor network, which gets past network blocks and hides your IP.
+              <span class="tor-status" id="tor-status"></span>
+            </div>
+          </div>
+          <div class="row-actions">
+            <button class="btn" id="new-private"><i data-icon="eyeOff"></i>Private tab</button>
+            <button class="btn" id="new-tor"><i data-icon="onion"></i>Tor tab</button>
+          </div>
+        </div>
+
+        <div class="opt">
+          <div class="txt"><div class="lbl">HTTPS-only mode</div><div class="hint">Upgrades every site to an encrypted connection, so your network can't read or tamper with pages. Asks before loading a site that only works over plain HTTP.</div></div>
+          <label class="switch"><input type="checkbox" data-setting="httpsOnly"><span></span></label>
+        </div>
+        <div class="opt">
+          <div class="txt"><div class="lbl">Pause history</div><div class="hint">Stop saving the sites you visit, in every tab.</div></div>
+          <label class="switch"><input type="checkbox" data-setting="historyPaused"><span></span></label>
+        </div>
+        <div class="opt" style="flex-wrap:wrap">
+          <div class="txt"><div class="lbl">Clear when Lychee closes</div><div class="hint">Wipe these every time you quit.</div></div>
+          <div class="checks" style="width:100%">
+            <label><input type="checkbox" data-exit="history">History and open tabs</label>
+            <label><input type="checkbox" data-exit="cookies">Cookies &amp; site data (signs you out)</label>
+            <label><input type="checkbox" data-exit="cache">Cached files</label>
+          </div>
+        </div>
+        <div class="opt">
+          <div class="txt"><div class="lbl">Confirm before closing</div><div class="hint">Ask before the window closes, so you don't lose tabs by accident.</div></div>
+          <label class="switch"><input type="checkbox" data-setting="confirmClose"><span></span></label>
+        </div>
+      </section>
+
+      <section class="sec card" id="search">
+        <h2>Search engine</h2>
+        <p class="desc">Used by the address bar and the home page search box.</p>
+        <div class="chips" id="engines"></div>
+        <div class="opt">
+          <div class="txt">
+            <div class="lbl">Lychee Search</div>
+            <div class="hint">Gives the search pages Lychee's look, name, logo and a Google-style image sidebar. Turn off to see the original search site. (Credits in About.)</div>
+          </div>
+          <label class="switch"><input type="checkbox" data-setting="searchSkin"><span></span></label>
+        </div>
+      </section>
+
+      <section class="sec card" id="look">
+        <h2>Appearance</h2>
+        <p class="desc">Themes change colours, wallpaper and live effects across Lychee and Lychee Search.</p>
+        <div class="theme-grid" id="themes"></div>
+
+        <div class="opt">
+          <div class="txt"><div class="lbl">Live effects</div><div class="hint">Snow, leaves, petals, fireflies… whatever your theme brings.</div></div>
+          <div class="row-actions">
+            <div class="chips" id="fx-amount" style="padding:0"></div>
+            <label class="switch"><input type="checkbox" data-setting="effects"><span></span></label>
+          </div>
+        </div>
+        <div class="opt">
+          <div class="txt"><div class="lbl">Effects on Lychee Search</div><div class="hint">Let the effect fall over your search results too. It never blocks clicks.</div></div>
+          <label class="switch"><input type="checkbox" data-setting="effectsOnSearch"><span></span></label>
+        </div>
+
+        <div class="opt" style="display:block">
+          <div class="lbl">Home wallpaper</div>
+          <div class="hint">The theme's own backdrop, your own picture, or nothing.</div>
+          <div class="row-actions" style="margin-top:10px">
+            <div class="chips" id="wallpaper-mode" style="padding:0"></div>
+            <button class="btn" id="pick-wallpaper"><i data-icon="file"></i>Choose image…</button>
+          </div>
+          <div class="dim-row" id="dim-row" hidden>
+            <span class="hint" style="margin:0">Darken</span>
+            <input type="range" id="wallpaper-dim" min="0" max="85" step="5">
+            <span class="hint" id="dim-val" style="margin:0;min-width:36px"></span>
+          </div>
+        </div>
+
+        <div class="opt">
+          <div class="txt"><div class="lbl">Accent colour</div><div class="hint">Picking a theme sets this; change it after if you like.</div></div>
+          <div class="swatches" id="swatches"></div>
+        </div>
+        <div class="opt">
+          <div class="txt"><div class="lbl">Clock on the home page</div></div>
+          <label class="switch"><input type="checkbox" data-setting="showClock"><span></span></label>
+        </div>
+      </section>
+
+      <section class="sec card" id="youtube">
+        <h2>YouTube</h2>
+        <p class="desc">Built-in upgrades for YouTube. They kick in automatically, no extensions needed.</p>
+        <div class="opt">
+          <div class="txt"><div class="lbl">Lychee theme on YouTube</div><div class="hint">YouTube follows your Lychee theme: background, colours, and an accent-coloured progress bar.</div></div>
+          <label class="switch"><input type="checkbox" data-setting="ytTheme"><span></span></label>
+        </div>
+        <div class="opt">
+          <div class="txt"><div class="lbl">Ambient Light</div><div class="hint">The video's colours glow softly around the player, like a TV with backlights.</div></div>
+          <label class="switch"><input type="checkbox" data-setting="ytAmbient"><span></span></label>
+        </div>
+        <div class="opt">
+          <div class="txt"><div class="lbl">Skip and hide ads</div><div class="hint">Hides ad slots and promos, and mutes and skips video ads the moment they start. Works with the ad blocker in Privacy.</div></div>
+          <label class="switch"><input type="checkbox" data-setting="ytAds"><span></span></label>
+        </div>
+      </section>
+
+      <section class="sec card" id="privacy">
+        <h2>Privacy &amp; security</h2>
+        <div class="opt">
+          <div class="txt">
+            <div class="lbl">Block ads and trackers</div>
+            <div class="hint">Uses the Ghostery filter engine with EasyList + EasyPrivacy. <span id="ads-total"></span></div>
+          </div>
+          <label class="switch"><input type="checkbox" data-setting="adblock"><span></span></label>
+        </div>
+        <div class="opt" style="flex-wrap:wrap">
+          <div class="txt"><div class="lbl">Clear browsing data</div><div class="hint">Pick what goes.</div></div>
+          <button class="btn danger" id="clear-btn"><i data-icon="trash"></i>Clear</button>
+          <div class="checks" style="width:100%">
+            <label><input type="checkbox" id="c-history" checked>History</label>
+            <label><input type="checkbox" id="c-cache" checked>Cached files</label>
+            <label><input type="checkbox" id="c-cookies">Cookies &amp; site data (signs you out)</label>
+            <label><input type="checkbox" id="c-downloads">Download list</label>
+          </div>
+        </div>
+        <div class="opt" style="display:block">
+          <div class="lbl">Site permissions</div>
+          <div class="hint">Camera, mic, location and so on that you allowed or blocked.</div>
+          <div id="perms" style="margin-top:8px"></div>
+        </div>
+      </section>
+
+      <section class="sec card" id="network">
+        <h2>Network</h2>
+        <div class="opt" style="display:block">
+          <div class="lbl">Secure DNS</div>
+          <div class="hint">
+            Looks sites up over encrypted DNS-over-HTTPS instead of asking your network's DNS server, like Brave's and Chrome's Secure DNS.
+            Your network can't see or filter which sites you look up.
+          </div>
+          <div class="chips" id="dns" style="padding-bottom:6px"></div>
+          <form class="proxy-row" id="dns-custom-form" hidden>
+            <label class="field"><i data-icon="lock"></i><input id="dns-custom" spellcheck="false" placeholder="https://dns.example/dns-query"></label>
+            <button class="btn primary">Apply</button>
+          </form>
+        </div>
+        <div class="opt">
+          <div class="txt">
+            <div class="lbl">Strict mode</div>
+            <div class="hint">Never fall back to your network's normal DNS. If the secure server is blocked, sites won't load instead of leaking.</div>
+          </div>
+          <label class="switch"><input type="checkbox" data-setting="dnsStrict"><span></span></label>
+        </div>
+        <div class="opt" style="display:block">
+          <div class="lbl">Browser identity</div>
+          <div class="hint">What Lychee tells websites it is (the user agent). Picking a phone makes most sites send their mobile version.</div>
+          <div class="chips" id="ua" style="padding-bottom:4px"></div>
+        </div>
+        <div class="opt" style="display:block">
+          <div class="lbl">Proxy server</div>
+          <div class="hint">
+            Leave empty to use your system settings. Examples: <code>socks5://127.0.0.1:1080</code>
+            <code>http://proxy.example:8080</code> <code>http=host:80;https=host:443</code>
+          </div>
+          <form class="proxy-row" id="proxy-form">
+            <label class="field"><i data-icon="network"></i><input id="proxy" spellcheck="false" placeholder="System proxy"></label>
+            <button class="btn primary">Apply</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="sec card" id="startup">
+        <h2>Startup &amp; downloads</h2>
+        <div class="opt">
+          <div class="txt"><div class="lbl">Reopen my tabs on startup</div><div class="hint">Otherwise you start on the home page.</div></div>
+          <label class="switch"><input type="checkbox" data-setting="restoreTabs"><span></span></label>
+        </div>
+        <div class="opt">
+          <div class="txt"><div class="lbl">Ask where to save each download</div><div class="hint">Off: files go straight to your Downloads folder.</div></div>
+          <label class="switch"><input type="checkbox" data-setting="askDownload"><span></span></label>
+        </div>
+      </section>
+
+      <section class="sec card" id="about">
+        <h2>About Lychee</h2>
+        <dl class="kv" id="about-kv"></dl>
+        <div class="opt" style="border-top:0;padding-top:0"><button class="btn" id="data-folder"><i data-icon="folder"></i>Open profile folder</button></div>
+        <div class="opt" id="update-row">
+          <div class="txt">
+            <div class="lbl">Updates</div>
+            <div class="hint" id="update-text">Checking…</div>
+            <div class="bar update-bar" id="update-bar" hidden><i></i></div>
+          </div>
+          <div class="row-actions">
+            <button class="btn" id="update-btn">Check now</button>
+            <label class="switch" title="Check for updates automatically"><input type="checkbox" data-setting="autoUpdate"><span></span></label>
+          </div>
+        </div>
+        <div class="opt" id="credits">
+          <div class="txt">
+            <div class="lbl">Credits</div>
+            <ul class="credits">
+              <li><b>Lychee Search</b> is a modded <b>DuckDuckGo</b>: results, images and answers come from DuckDuckGo; Lychee restyles and renames the pages.</li>
+              <li><b>Engine:</b> Chromium, via Electron.</li>
+              <li><b>Ad &amp; tracker blocking:</b> the Ghostery adblocker engine with EasyList and EasyPrivacy.</li>
+              <li><b>Secure DNS:</b> Cloudflare, Google, Quad9 and AdGuard public resolvers.</li>
+              <li><b>Tor tabs:</b> the Tor Project's tor (when installed).</li>
+              <li><b>Fonts:</b> Google Sans Flex and Google Sans Code, SIL Open Font License.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="opt">
+          <div class="txt">
+            <div class="lbl">Keyboard shortcuts</div>
+            <div class="hint">
+              <code>Ctrl+T</code> new tab · <code>Ctrl+W</code> close · <code>Ctrl+Shift+T</code> reopen ·
+              <code>Ctrl+Tab</code> next tab · <code>Ctrl+1-9</code> jump · <code>Ctrl+L</code> address bar ·
+              <code>Ctrl+F</code> find · <code>Ctrl+D</code> bookmark · <code>Ctrl+H</code> history ·
+              <code>Ctrl+J</code> downloads · <code>Ctrl +/-/0</code> zoom · <code>F11</code> fullscreen ·
+              <code>F12</code> devtools · <code>Alt+Left/Right</code> back/forward ·
+              <code>Ctrl+Shift+N</code> private tab · <code>Alt+Shift+N</code> Tor tab · <code>`</code> panic (changeable)
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+<script src="settings.js"></script>
+</body>
+</html>

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' * data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>History</title>
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/pages.css">
+<script src="/shared/icons.js"></script>
+<script src="/shared/themes.js"></script>
+<script src="/shared/effects.js"></script>
+<script src="/shared/page.js"></script>
+</head>
+<body>
+<main class="page">
+  <header class="page-head">
+    <div class="head-icon"><i data-icon="history"></i></div>
+    <div><h1>History</h1><p class="sub" id="sub">Everywhere you've been</p></div>
+    <div class="head-actions"><button class="btn danger" id="clear"><i data-icon="trash"></i>Clear all</button></div>
+  </header>
+  <div class="toolbar-row">
+    <label class="field"><i data-icon="search"></i><input id="q" placeholder="Search history" spellcheck="false" autofocus></label>
+  </div>
+  <div id="list"></div>
+  <p class="empty" id="empty" hidden>Nothing here yet.</p>
+</main>
+<dialog id="confirm">
+  <h2>Clear all history?</h2>
+  <p style="color:var(--muted);margin:0">This removes every page from your history. It can't be undone.</p>
+  <div class="actions"><button class="btn" id="no">Cancel</button><button class="btn primary" id="yes">Clear history</button></div>
+</dialog>
+<script src="history.js"></script>
+</body>
+</html>

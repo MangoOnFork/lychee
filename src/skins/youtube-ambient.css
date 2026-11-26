@@ -1,0 +1,14 @@
+/* Lychee Ambient Light for YouTube: the glow behind the player (drawn by youtube.js).
+   YouTube's app background is made see-through so the glow (z-index -1) can show around the player. */
+html.lychee-ambient, html.lychee-ambient body { background-color: #0f0f0f; }
+html.lychee-ambient ytd-app { background: transparent !important; }
+#lychee-ambient {
+  position: absolute; left: 0; top: 0; width: 0; height: 0;
+  z-index: -1; pointer-events: none;
+  transform-origin: center;
+}
+#lychee-ambient canvas {
+  display: block; width: 100%; height: 100%;
+  filter: blur(60px) saturate(1.6);
+  opacity: .42;
+}
