@@ -1,6 +1,6 @@
 {
   "name": "lychee",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Lychee: a dark, themeable Chromium browser with built-in safety tools",
   "main": "src/main.js",
   "scripts": {
