@@ -22,7 +22,7 @@ module.exports = async function selftest(ctx) {
     const t = [...ctx.tabs.values()].find((x) => x.view.getVisible());
     if (t) fs.writeFileSync(path.join(ctx.SHOTS_DIR, `${name}-page.png`), (await t.wc.capturePage()).toPNG());
   };
-  const check = (name, ok, info) => out.checks.push({ name, ok: !!ok, info });
+  const check = (name, ok, info) => { out.checks.push({ name, ok: !!ok, info }); console.log(`CHECK ${ok ? 'ok  ' : 'FAIL'} ${name}`); };
 
   try {
     const win = ctx.win();
@@ -155,6 +155,18 @@ module.exports = async function selftest(ctx) {
     await load(ff);
     const dUa = await ff.wc.executeJavaScript('navigator.userAgent');
     check('default UA looks like stock Chrome', /Chrome\/\d+\.0\.0\.0 Safari/.test(dUa) && !/Firefox|Electron/.test(dUa), dUa);
+
+    // Google sign-in sees Firefox (Google blocks embedded Chromium), everything else sees Chrome
+    const gs = ctx.createTab('https://accounts.google.com/ServiceLogin?hl=en');
+    await load(gs, 20000);
+    const gInfo = await gs.wc.executeJavaScript(`({ ua: navigator.userAgent, uad: typeof navigator.userAgentData, host: location.hostname,
+      blocked: /may not be secure/i.test(document.body.innerText) })`);
+    check('Google sign-in sees Firefox, no Chromium hints', gInfo.host === 'accounts.google.com' && /Firefox\//.test(gInfo.ua) && gInfo.uad === 'undefined' && !gInfo.blocked, gInfo);
+    gs.wc.loadURL('https://example.com/?after-google');
+    await load(gs);
+    const gBack = await gs.wc.executeJavaScript('navigator.userAgent');
+    check('leaving Google switches back to Chrome', /Chrome\//.test(gBack) && !/Firefox/.test(gBack), gBack);
+    ctx.closeTab(gs.id);
 
     for (const k of Object.keys(ctx.safety.DISGUISES).filter((x) => x !== 'none')) {
       const img = await ctx.safety.disguiseIcon(k);

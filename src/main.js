@@ -265,6 +265,7 @@ function setupSession(ses, kind) {
   registerProtocol(ses);
   wirePermissions(ses);
   wireDownloads(ses);
+  googleHeaders(ses);
   if (kind === 'tor') ses.setProxy({ proxyRules: `socks5://127.0.0.1:${tor.port}`, proxyBypassRules: '<-loopback>' });
   else if (settings.data.proxy.trim()) ses.setProxy({ proxyRules: settings.data.proxy.trim(), proxyBypassRules: '<local>' });
   if (blocker && blockerOn) blockIn(ses);
@@ -286,6 +287,43 @@ const allSessions = () => [session.defaultSession, ...extraSessions.values()];
 function currentUA() {
   const presets = safety.uaPresets(baseUA);
   return (presets[settings.data.uaPreset] || presets.default).ua;
+}
+
+// ---------------------------------------------------------------- Google sign-in
+// Google blocks sign-in from "embedded" Chromium (Electron) with "This browser or app may not be
+// secure". It does allow Firefox, so on Google's sign-in host only, Lychee presents itself as Firefox:
+// Firefox UA + no Chromium client hints on the wire, and navigator matches (see preload-page.js).
+const GOOGLE_AUTH_RE = /^https:\/\/accounts\.google\.com\//i;
+const firefoxUA = () => safety.uaPresets(baseUA).firefox.ua;
+
+function googleHeaders(ses) {
+  ses.webRequest.onBeforeSendHeaders({ urls: ['https://accounts.google.com/*'] }, (d, cb) => {
+    const h = d.requestHeaders;
+    for (const k of Object.keys(h)) if (/^user-agent$|^sec-ch-ua/i.test(k)) delete h[k];
+    h['User-Agent'] = firefoxUA();
+    cb({ requestHeaders: h });
+  });
+}
+
+// keep navigator.userAgent in step with the headers while a tab/popup is on the sign-in pages
+function googleUA(wc) {
+  let on = false;
+  // Switch right away when a navigation starts, so the new page's navigator.userAgent matches.
+  // Changing the UA synchronously inside a *redirect* event crashes Electron, so redirects defer a
+  // tick (their request headers are already handled by googleHeaders).
+  const apply = (want) => {
+    if (wc.isDestroyed()) return;
+    try { wc.setUserAgent(want ? firefoxUA() : currentUA()); } catch {}
+  };
+  const sync = (url, deferred) => {
+    const want = GOOGLE_AUTH_RE.test(url || '');
+    if (want === on) return;
+    on = want;
+    if (deferred) setImmediate(() => apply(want)); else apply(want);
+  };
+  wc.on('did-start-navigation', (e, url, isInPlace, isMainFrame) => { if (isMainFrame && !isInPlace) sync(url, false); });
+  wc.on('did-redirect-navigation', (e, url, isInPlace, isMainFrame) => { if (isMainFrame) sync(url, true); });
+  sync(wc.getURL(), true);
 }
 
 function applyUA() {
@@ -691,6 +729,9 @@ function wireTab(t) {
     if (tracked()) recordFavicon(wc.getURL(), t.favicon);
     sendTabsSoon();
   });
+  googleUA(wc);
+  // sign-in popups ("Sign in with Google" windows) get the same treatment
+  wc.on('did-create-window', (w) => googleUA(w.webContents));
   wc.on('did-start-navigation', (e, url, isInPlace, isMainFrame) => {
     if (isMainFrame && !isInPlace) { t.blocked = 0; t.favicon = null; sendTabsSoon(); }
     // catches every way into AI chat: links, redirects, in-page (pushState) routing
@@ -768,7 +809,8 @@ function wireTab(t) {
         action: 'allow',
         overrideBrowserWindowOptions: {
           autoHideMenuBar: true, backgroundColor: '#ffffff', icon: path.join(SHARED, 'icon.png'),
-          webPreferences: { contextIsolation: true, sandbox: true, session: sessionFor(t.kind) },
+          // preload-page.js gives websites nothing; it's here for the Google sign-in fix
+          webPreferences: { contextIsolation: true, sandbox: true, session: sessionFor(t.kind), preload: path.join(SRC, 'preload-page.js') },
         },
       };
     }
