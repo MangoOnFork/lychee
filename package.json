@@ -24,7 +24,7 @@
     "electron-updater": "^6.8.11"
   },
   "productName": "Lychee",
-  "homepage": "https://mangoonfork.github.io/lychee/",
+  "homepage": "https://browserlychee.com/",
   "repository": {
     "type": "git",
     "url": "https://github.com/MangoOnFork/lychee.git"

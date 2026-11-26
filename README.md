@@ -2,7 +2,7 @@
 
 A dark, themeable Chromium browser for Windows and Mac, built on Electron.
 
-**Download:** https://mangoonfork.github.io/lychee/
+**Download:** https://browserlychee.com/
 
 - Live seasonal themes and effects (snow, leaves, petals, fireflies, stars, bats)
 - Lychee Search (a modded DuckDuckGo), YouTube theme + Ambient Light + ad skipping
