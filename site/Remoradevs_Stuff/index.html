@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Shawcat Cube</title>
+<style>
+@font-face { font-family: "Londrina"; src: url(assets/LondrinaSolid-Regular.ttf); }
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body {
+  background: #1f1f1f url(assets/background.png) repeat;
+  background-size: 300px 300px;
+  animation: scroll 20s linear infinite;
+  font-family: "Londrina", sans-serif;
+  display: grid; place-items: center;
+}
+@keyframes scroll { from { background-position: 0 0; } to { background-position: 0 300px; } }
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,.7) 100%);
+}
+#cube { position: relative; width: min(420px, 80vw); aspect-ratio: 1; cursor: pointer; }
+#cube canvas { display: block; width: 100% !important; height: 100% !important; }
+#toasts { position: fixed; top: 16px; left: 50%; translate: -50% 0; z-index: 10; display: flex; flex-direction: column; gap: 10px; align-items: center; pointer-events: none; }
+.toast { background: #111; color: #fff; border-radius: 6px; padding: 10px 22px; font-size: 28px; box-shadow: -3px 3px 0 1px rgba(0,0,0,.29); animation: pop .4s cubic-bezier(.3,1.8,.5,1); }
+@keyframes pop { from { transform: scale(.3) rotate(-8deg); opacity: 0; } }
+</style>
+</head>
+<body>
+<div id="toasts"></div>
+<div id="cube" title="poke him"></div>
+<script>
+const boing = new Audio('assets/switch_sound.mp3');
+window.uiPlay = () => { const a = boing.cloneNode(); a.volume = 1; a.play().catch(() => {}); };
+window.uiToast = msg => { const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.getElementById('toasts').appendChild(t); setTimeout(() => t.remove(), 1800); };
+</script>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+// Red rounded cube guy with big eyes that follow the cursor, blink, and squish when poked
+import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+const host = document.getElementById('cube');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(420, 420, false);
+host.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const cam = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
+cam.position.set(0, 0.35, 6.2); cam.lookAt(0, 0, 0);
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x442222, 1.6));
+const key = new THREE.DirectionalLight(0xffffff, 2.2); key.position.set(2.5, 4, 5); scene.add(key);
+
+// 3-step toon ramp so it matches the flat UI
+const ramp = new THREE.DataTexture(new Uint8Array([90, 90, 90, 255, 180, 180, 180, 255, 255, 255, 255, 255]), 3, 1);
+ramp.minFilter = ramp.magFilter = THREE.NearestFilter; ramp.needsUpdate = true;
+const toon = c => new THREE.MeshToonMaterial({ color: c, gradientMap: ramp });
+
+const guy = new THREE.Group(); scene.add(guy);
+const body = new THREE.Group(); guy.add(body);
+const geo = new RoundedBoxGeometry(2, 2, 2, 6, 0.38);
+body.add(new THREE.Mesh(geo, toon(0xff3b3b)));
+// thick dark outline (inverted hull), like the UI's #111 borders
+const hull = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x111111, side: THREE.BackSide }));
+hull.scale.setScalar(1.06); body.add(hull);
+
+// eyes: white ball + black pupil + glint, set into the front face
+const eyes = [];
+for (const x of [-0.46, 0.46]) {
+  const eye = new THREE.Group(); eye.position.set(x, 0.22, 0.93); body.add(eye);
+  const white = new THREE.Mesh(new THREE.SphereGeometry(0.4, 32, 24), toon(0xffffff));
+  white.scale.z = 0.55; eye.add(white);
+  const look = new THREE.Group(); eye.add(look);
+  const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.2, 24, 16), new THREE.MeshBasicMaterial({ color: 0x111111 }));
+  pupil.scale.z = 0.35; pupil.position.z = 0.19; look.add(pupil);
+  const glint = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  glint.position.set(0.07, 0.08, 0.27); look.add(glint);
+  // eyelid: a red cap that drops over the eye when blinking
+  const lid = new THREE.Mesh(new THREE.SphereGeometry(0.43, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), toon(0xff3b3b));
+  lid.scale.z = 0.62; lid.rotation.x = -Math.PI / 2; lid.scale.y = 0.001; eye.add(lid);
+  eyes.push({ look, lid, white });
+}
+
+// mouse tracking (whole page, so he watches you everywhere)
+const target = new THREE.Vector2(), cur = new THREE.Vector2();
+addEventListener('pointermove', e => {
+  const r = host.getBoundingClientRect();
+  target.set(((e.clientX - (r.left + r.width / 2)) / innerWidth) * 2, -((e.clientY - (r.top + r.height / 2)) / innerHeight) * 2);
+  target.clampLength(0, 1);
+});
+
+let blinkT = 0, nextBlink = 2, squish = 0, spin = 0;
+host.addEventListener('pointerdown', () => {
+  squish = 1; spin += Math.PI * 2; blinkT = 0.0001;
+  window.uiPlay?.('boing'); window.uiToast?.(['hey!', 'ow', 'stop poking me', 'boing'][Math.random() * 4 | 0]);
+});
+
+const clock = new THREE.Clock();
+let rotY = 0;
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+  cur.lerp(target, 1 - Math.pow(0.0005, dt));
+
+  // idle bob + lean toward cursor
+  rotY += (spin - rotY) * (1 - Math.pow(0.02, dt));
+  guy.position.y = Math.sin(t * 2.2) * 0.08;
+  guy.rotation.set(-cur.y * 0.25 + Math.sin(t * 1.3) * 0.03, rotY + cur.x * 0.45, Math.sin(t * 1.7) * 0.05);
+
+  // squash and stretch when poked
+  squish = Math.max(0, squish - dt * 2.2);
+  const s = Math.sin(squish * Math.PI * 3) * squish * 0.25;
+  body.scale.set(1 + s, 1 - s, 1 + s);
+
+  // pupils
+  for (const e of eyes) { e.look.position.set(cur.x * 0.17, cur.y * 0.15, 0); }
+
+  // blink
+  nextBlink -= dt;
+  if (nextBlink <= 0 && !blinkT) { blinkT = 0.0001; nextBlink = 1.5 + Math.random() * 3.5; }
+  let lidAmt = 0;
+  if (blinkT) { blinkT += dt; lidAmt = Math.sin(Math.min(blinkT / 0.16, 1) * Math.PI); if (blinkT > 0.16) blinkT = 0; }
+  for (const e of eyes) { e.lid.scale.y = Math.max(0.001, lidAmt * 0.95); e.look.visible = lidAmt < 0.7; }
+
+  renderer.render(scene, cam);
+});
+</script>
+</body>
+</html>
