@@ -32,6 +32,14 @@ function themeCard(id, th, opts) {
   const pv = document.createElement('div');
   pv.className = 'pv';
   pv.style.background = `${th.wallpaper}, ${th.bg}`;
+  if (th.video) {
+    // live preview of a video wallpaper (paused unless hovered, so the grid stays light)
+    const v = document.createElement('video');
+    Object.assign(v, { muted: true, loop: true, playsInline: true, preload: 'metadata', src: th.video + '#t=2' });
+    b.addEventListener('mouseenter', () => v.play().catch(() => {}));
+    b.addEventListener('mouseleave', () => v.pause());
+    pv.append(v);
+  }
   const dot = document.createElement('span');
   dot.className = 'dot';
   dot.style.background = th.accent;

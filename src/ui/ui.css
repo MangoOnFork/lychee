@@ -33,6 +33,21 @@ body {
 @keyframes twinkle { 0%, 100% { opacity: 1; } 50% { opacity: .35; box-shadow: 0 0 3px 0 var(--c); } }
 @media (prefers-reduced-motion: reduce) { #lights i { animation: none; } }
 
+/* ---------------- sidebar hidden (Win+Shift+Caps Lock) */
+body.rail-hidden { grid-template-columns: 0 1fr; }
+body.rail-hidden #rail { display: none; }
+body.rail-hidden #lights { left: 0; }
+.os-mac.rail-hidden #strip { padding-left: 84px; }
+
+/* ---------------- tab drag: where a dragged tab will land */
+#tabs.drop-target { position: relative; }
+#drop-mark {
+  position: fixed; top: 8px; width: 3px; height: 24px; border-radius: 3px;
+  background: var(--accent); box-shadow: 0 0 8px var(--accent);
+  pointer-events: none; z-index: 20;
+}
+#drop-mark[hidden] { display: none; }
+
 /* ---------------- Mac: traffic lights live top-left, no window buttons on the right */
 .os-mac #rail { padding-top: 40px; }
 .os-mac #strip { padding-left: 30px; padding-right: 12px; }
@@ -127,8 +142,6 @@ body {
 }
 /* during panic, hide everything that would give the game away */
 body.panicking #newtab, body.panicking .tab .close { display: none; }
-.tab.drop-before { box-shadow: inset 3px 0 0 var(--accent); }
-.tab.drop-after { box-shadow: inset -3px 0 0 var(--accent); }
 .tab .fav {
   width: 18px; height: 18px; flex: none;
   display: grid; place-items: center;

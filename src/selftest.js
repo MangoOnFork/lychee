@@ -13,7 +13,9 @@ module.exports = async function selftest(ctx) {
     const tm = setTimeout(r, ms);
     wc.once('did-stop-loading', () => { clearTimeout(tm); r(); });
   });
-  const shot = (name) => shotInner(name).catch((e) => console.log(`[shot ${name} skipped] ${e.message}`));
+  // screenshots of a hidden, throttled window can hang forever: give up after 8 seconds
+  const shot = (name) => Promise.race([shotInner(name), new Promise((_, no) => setTimeout(() => no(new Error('timed out')), 8000))])
+    .catch((e) => console.log(`[shot ${name} skipped] ${e.message}`));
   const shotInner = async (name) => {
     if (!ctx.SHOTS_DIR) return;
     fs.mkdirSync(ctx.SHOTS_DIR, { recursive: true });
@@ -22,7 +24,10 @@ module.exports = async function selftest(ctx) {
     const t = [...ctx.tabs.values()].find((x) => x.view.getVisible());
     if (t) fs.writeFileSync(path.join(ctx.SHOTS_DIR, `${name}-page.png`), (await t.wc.capturePage()).toPNG());
   };
-  const check = (name, ok, info) => { out.checks.push({ name, ok: !!ok, info }); console.log(`CHECK ${ok ? 'ok  ' : 'FAIL'} ${name}`); };
+  // watchdog: a step that never returns (a page that hangs) ends the run instead of freezing it
+  let lastStep = { at: Date.now(), name: 'start' };
+  setInterval(() => { if (Date.now() - lastStep.at > 90000) { console.log('SELFTEST STALLED after: ' + lastStep.name); app.exit(3); } }, 5000).unref();
+  const check = (name, ok, info) => { lastStep = { at: Date.now(), name }; out.checks.push({ name, ok: !!ok, info }); console.log(`CHECK ${ok ? 'ok  ' : 'FAIL'} ${name}` + (ok ? '' : '  ' + JSON.stringify(info))); };
 
   try {
     const win = ctx.win();
@@ -282,10 +287,14 @@ module.exports = async function selftest(ctx) {
     check(ytInfo.framesRun ? 'Ambient Light glows behind the player' : 'Ambient Light (skipped: test window was covered, no frames)',
       !ytInfo.framesRun || !ytInfo.video || !ytInfo.vw || (ytInfo.ambient && ytInfo.ambientW > 100 && /lychee-ambient/.test(ytInfo.htmlCls)), ytInfo);
     await shot('youtube');
+    const ytQ = await yt.wc.executeJavaScript(`(() => { const p = document.getElementById('movie_player');
+      return p && p.getAvailableQualityLevels ? { levels: p.getAvailableQualityLevels(), q: p.getPlaybackQuality() } : null; })()`).catch(() => null);
+    check('YouTube plays in the sharpest quality available', !!ytQ && ytQ.levels.length > 0 && ytQ.q === ytQ.levels[0], ytQ);
     ctx.setSetting('ytAmbient', false);
     await wait(800);
     const ambOff = await yt.wc.executeJavaScript("!!document.getElementById('lychee-ambient')");
-    check('Ambient Light turns off', !ambOff, ambOff);
+    // with no animation frames youtube.js never gets to tidy up, so this only counts when frames run
+    check(ytInfo.framesRun ? 'Ambient Light turns off' : 'Ambient Light off (skipped: no frames)', !ytInfo.framesRun || !ambOff, ambOff);
     ctx.setSetting('ytAmbient', true);
     ctx.closeTab(yt.id);
 
@@ -318,6 +327,21 @@ module.exports = async function selftest(ctx) {
     await wait(1500);
     await shot('theme-winter');
 
+    ctx.setSetting('theme', 'blizzard');
+    await wait(3500);
+    const bliz = await home.wc.executeJavaScript(`(async () => { const v = document.querySelector('#wallpaper video');
+      return { video: !!v, playing: !!v && !v.paused && v.readyState >= 2 && v.currentTime > 0, err: v && v.error && v.error.code,
+        blur: v ? getComputedStyle(v).filter : '', fx: pageFx ? pageFx.count : -1,
+        frames: await new Promise((r) => { requestAnimationFrame(() => r(true)); setTimeout(() => r(false), 1500); }) }; })()`);
+    // a covered test window gets no frames, so the video can't advance: then only check it's there and blurred
+    check(bliz.frames ? 'Blizzard theme: blurred video wallpaper plays + blizzard snow' : 'Blizzard theme: blurred video wallpaper + snow (playback skipped: no frames)',
+      bliz.video && (bliz.playing || !bliz.frames) && /blur/.test(bliz.blur) && bliz.fx > 50, bliz);
+    await shot('theme-blizzard');
+    ctx.setSetting('theme', 'winter');
+    await wait(800);
+    const noVid = await home.wc.executeJavaScript(`!document.querySelector('#wallpaper video')`);
+    check('leaving Blizzard removes the video', noVid, noVid);
+
     const ddg2 = ctx.createTab('https://duckduckgo.com/?q=christmas+cookies&ia=web');
     await load(ddg2, 20000);
     await wait(2000);
@@ -346,6 +370,87 @@ module.exports = async function selftest(ctx) {
     const wpRow = await st.wc.executeJavaScript(`(() => { const r = document.getElementById('wallpaper-mode').getBoundingClientRect(); const h = document.querySelector('#look h2').getBoundingClientRect(); return { rowTop: Math.round(r.top), headTop: Math.round(h.top), pos: getComputedStyle(document.getElementById('wallpaper-mode')).position }; })()`);
     check('wallpaper buttons sit in the Appearance card', wpRow.pos === 'static' && wpRow.rowTop > wpRow.headTop + 100, wpRow);
     await shot('settings-look');
+
+    // ---------------- bad certificate: "Go anyway"
+    const badCert = ctx.createTab('https://expired.badssl.com/');
+    await waitLoad(badCert.wc, 20000);
+    await wait(1500);
+    const badCertPage = await badCert.wc.executeJavaScript(`({ url: location.href, unsafe: !document.getElementById('unsafe')?.hidden })`).catch(() => ({}));
+    check('bad certificate shows the error page with "Go anyway"', /^lychee:\/\/error/.test(badCertPage.url || '') && badCertPage.unsafe, badCertPage);
+    await badCert.wc.executeJavaScript(`document.getElementById('go-anyway').click()`).catch(() => {});
+    await wait(800);
+    await waitLoad(badCert.wc, 20000);
+    await wait(800);
+    check('"Go anyway" opens the site', /^https:\/\/expired\.badssl\.com/.test(badCert.wc.getURL()), badCert.wc.getURL());
+    ctx.closeTab(badCert.id);
+
+    // ---------------- background tabs hold autoplay until opened
+    const vidHtml = path.join(app.getPath('temp'), 'lychee-autoplay-test.html');
+    const vidSrc = require('url').pathToFileURL(path.join(__dirname, 'shared', 'wallpapers', 'blizzard.mp4')).toString();
+    fs.writeFileSync(vidHtml, `<!doctype html><video id=v autoplay loop src="${vidSrc}" style="width:640px"></video>`);
+    const prevActive = ctx.activeId();
+    const bgTab = ctx.createTab(require('url').pathToFileURL(vidHtml).toString(), { activate: false });
+    await waitLoad(bgTab.wc);
+    await wait(2500);
+    const held = await bgTab.wc.executeJavaScript(`({ paused: v.paused, t: v.currentTime, ready: v.readyState })`);
+    check('background tab: video waits instead of playing', held.paused && held.ready >= 1, held);
+    ctx.activate(bgTab.id);
+    await wait(2000);
+    const played = await bgTab.wc.executeJavaScript(`({ paused: v.paused, t: v.currentTime })`);
+    check('opening the tab starts the video', !played.paused && played.t > 0 && !bgTab.wc.isAudioMuted(), { ...played, muted: bgTab.wc.isAudioMuted() });
+    ctx.closeTab(bgTab.id);
+    if (prevActive) ctx.activate(prevActive);
+
+    // ---------------- hideable sidebar
+    ctx.setSetting('railHidden', true);
+    await wait(500);
+    const railOff = { cls: await ctx.ui().executeJavaScript("document.body.classList.contains('rail-hidden')"), x: ctx.tabs.get(ctx.activeId()).view.getBounds().x };
+    ctx.setSetting('railHidden', false);
+    await wait(500);
+    const railOn = { cls: await ctx.ui().executeJavaScript("document.body.classList.contains('rail-hidden')"), x: ctx.tabs.get(ctx.activeId()).view.getBounds().x };
+    check('sidebar hides and comes back (page fills the space)', railOff.cls && railOff.x === 0 && !railOn.cls && railOn.x === 52, { railOff, railOn });
+
+    // ---------------- permission card (instead of a system dialog)
+    const W1 = ctx.curW();
+    delete ctx.settings().sitePermissions['https://example.com|notifications']; // left over from an earlier run
+    const pt = ctx.createTab('https://example.com/', { w: W1 });
+    await waitLoad(pt.wc);
+    await wait(500);
+    pt.wc.executeJavaScript('window.__perm = Notification.requestPermission(); 1', true).catch(() => {});
+    await wait(1500);
+    const card = W1.prompt ? {
+      visible: W1.prompt.view.getVisible(), bounds: W1.prompt.view.getBounds(), pending: ctx.prompts().length,
+      text: await W1.prompt.view.webContents.executeJavaScript("document.getElementById('card').innerText").catch(() => ''),
+    } : null;
+    check('site asking for a permission shows the corner card', !!card && card.visible && card.pending === 1 && /example\.com/.test(card.text) &&
+      /notifications/i.test(card.text) && card.bounds.y < 110 && card.bounds.x < 400, card);
+    if (W1.prompt) await W1.prompt.view.webContents.executeJavaScript("document.querySelector('[data-choice=block]').click()").catch(() => {});
+    await wait(600);
+    const permResult = await pt.wc.executeJavaScript('window.__perm').catch((e) => 'err ' + e);
+    const savedPerm = ctx.settings().sitePermissions['https://example.com|notifications'];
+    check('"Never allow" answers the site and is remembered', permResult === 'denied' && savedPerm === false && !W1.prompt.view.getVisible(), { permResult, savedPerm });
+    delete ctx.settings().sitePermissions['https://example.com|notifications'];
+
+    // ---------------- windows: move a tab to another window, drag one out, close a window
+    const W2 = ctx.newWindow('lychee://home/');
+    await wait(1500);
+    ctx.moveTabToWindow(pt.id, W2, 0);
+    await wait(800);
+    const w2Strip = await W2.ui.executeJavaScript("document.querySelectorAll('.tab').length").catch(() => -1);
+    check('a tab moves to another window', pt.w === W2 && W2.order[0] === pt.id && !W1.order.includes(pt.id) &&
+      W2.win.contentView.children.includes(pt.view) && !W1.win.contentView.children.includes(pt.view) && w2Strip === W2.order.length,
+      { w2: W2.order, w1: W1.order.length, w2Strip });
+    const before3 = ctx.wins().length;
+    const W3 = ctx.detachTab(pt.id, { x: 300, y: 300 });
+    await wait(1200);
+    check('dragging a tab out makes a new window with just that tab', W3 && W3 !== W2 && ctx.wins().length === before3 + 1 && W3.order.length === 1 && pt.w === W3 && !W2.order.includes(pt.id),
+      { wins: ctx.wins().length, w3: W3 && W3.order });
+    W3.win.close();
+    await wait(800);
+    check('closing a window closes its tabs', !ctx.tabs.has(pt.id) && ctx.wins().length === before3, { wins: ctx.wins().length });
+    W2.win.close();
+    await wait(800);
+    check('back to one window', ctx.wins().length === 1 && ctx.curW() === W1, ctx.wins().length);
   } catch (e) {
     check('selftest crashed', false, String(e && e.stack || e));
   }

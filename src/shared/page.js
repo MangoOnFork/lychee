@@ -48,6 +48,20 @@ function applyPageTheme(s) {
       wp.className = 'theme';
       wp.style.backgroundImage = s.wallpaper === 'none' ? 'none' : th.wallpaper;
     }
+    // live video wallpaper (Blizzard): blurred and greyed, over the gradient fallback
+    const wantVideo = s.wallpaper === 'theme' && th.video ? th.video : null;
+    let vid = wp.querySelector('video');
+    if (!wantVideo) { if (vid) vid.remove(); }
+    else if (!vid || vid.dataset.src !== wantVideo) {
+      if (vid) vid.remove();
+      vid = document.createElement('video');
+      Object.assign(vid, { muted: true, loop: true, autoplay: true, playsInline: true });
+      vid.dataset.src = wantVideo;
+      vid.src = wantVideo;
+      vid.addEventListener('canplay', () => vid.classList.add('on'), { once: true });
+      wp.append(vid);
+      vid.play().catch(() => {});
+    }
   }
   if (mode !== 'none' && window.LycheeEffects) {
     let c = document.getElementById('fx');

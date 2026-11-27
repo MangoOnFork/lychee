@@ -23,6 +23,41 @@
         c.beginPath(); c.arc(p.x, p.y, p.r, 0, TAU); c.fill();
       },
     },
+    // heavy wind-driven snow: three depths, grey-white flakes, gusts that come and go
+    blizzard: {
+      density: 190,
+      shades: ['#ffffff', '#eef1f4', '#d9dee3', '#c3c9cf'],
+      wind: (t) => 95 + 70 * Math.sin(t * 0.33) + 35 * Math.sin(t * 1.27 + 1.3),
+      make(w, h, fresh) {
+        const z = R(0.2, 1);
+        const p = { z, r: 0.5 + z * 2.1, vy: 45 + z * 125, ph: R(TAU), a: 0.22 + z * 0.6, col: pick(this.shades) };
+        if (fresh) { p.x = R(w); p.y = R(h); }
+        else if (Math.random() < 0.45) { p.x = R(-30, -6); p.y = R(-20, h); }   // blown in from the side
+        else { p.x = R(-w * 0.35, w); p.y = R(-40, -6); }                       // or from the top
+        return p;
+      },
+      step(p, dt, t) {
+        const wx = this.wind(t) * (0.45 + p.z * 0.75) + Math.sin(t * 2.1 + p.ph) * 22 * p.z;
+        p.vx = wx;
+        p.x += wx * dt;
+        p.y += (p.vy + Math.sin(t * 1.7 + p.ph) * 10) * dt;
+      },
+      offscreen: (p, w, h) => p.y > h + 30 || p.x > w + 40,
+      draw(c, p) {
+        c.globalAlpha = p.a;
+        if (p.z > 0.72) {
+          // near flakes smear into short streaks along their path
+          const k = 0.028;
+          c.strokeStyle = p.col;
+          c.lineWidth = p.r * 1.15;
+          c.lineCap = 'round';
+          c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(p.x - (p.vx || 0) * k, p.y - p.vy * k); c.stroke();
+        } else {
+          c.fillStyle = p.col;
+          c.beginPath(); c.arc(p.x, p.y, p.r, 0, TAU); c.fill();
+        }
+      },
+    },
     leaves: {
       density: 16,
       colors: ['#e8742a', '#d2452a', '#f0a030', '#b5651d', '#c9382d', '#e0902a'],

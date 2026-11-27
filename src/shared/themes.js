@@ -31,6 +31,17 @@
       wallpaper: 'radial-gradient(ellipse 80% 35% at 30% -5%, rgba(80,230,190,.16), transparent 70%),' +
         'radial-gradient(ellipse 70% 30% at 75% -2%, rgba(124,160,255,.18), transparent 70%)',
     },
+    blizzard: {
+      name: 'Blizzard', blurb: 'Gloomy snowstorm in the woods', accent: '#d9dee3', effect: 'blizzard',
+      palette: {
+        bg: '#0b0c0d', bg2: '#0f1011', surface: '#16181a', surface2: '#1d2023', surface3: '#272a2e',
+        border: '#212427', border2: '#303438', text: '#eef0f2', muted: '#9ca2a8', faint: '#62686e',
+      },
+      // live wallpaper on the home page: the frozen woods video, blurred and greyed out
+      video: '/shared/wallpapers/blizzard.mp4',
+      wallpaper: 'radial-gradient(ellipse 90% 55% at 50% -10%, rgba(220,226,232,.22), transparent 70%),' +
+        'linear-gradient(180deg, #3a3e42 0%, #1a1c1e 55%, #0b0c0d 100%)',
+    },
     autumn: {
       name: 'Harvest', blurb: 'Falling leaves, warm glow', accent: '#ff8a3d', effect: 'leaves',
       palette: {
@@ -95,7 +106,7 @@
   function list() {
     return Object.keys(THEMES).map((id) => ({
       id, name: THEMES[id].name, blurb: THEMES[id].blurb, accent: THEMES[id].accent,
-      bg: THEMES[id].palette.bg, wallpaper: THEMES[id].wallpaper, effect: THEMES[id].effect,
+      bg: THEMES[id].palette.bg, wallpaper: THEMES[id].wallpaper, effect: THEMES[id].effect, video: THEMES[id].video || null,
     }));
   }
 

@@ -44,6 +44,11 @@ if (httpsOnly) {
   $('#retry').classList.remove('primary');
   $('#search').innerHTML = `${icon('left')}Go back`;
 }
+// certificate errors: let the user go through anyway for this site (until Lychee restarts)
+if (n <= -200 && n > -300 && /^https:\/\//i.test(url)) {
+  $('#unsafe').hidden = false;
+  $('#go-anyway').addEventListener('click', () => L.call('allowCert', url));
+}
 $('#retry').addEventListener('click', () => {
   if (!url) return;
   if (httpsOnly) L.call('allowHttp', url);

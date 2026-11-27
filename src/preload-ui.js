@@ -6,7 +6,7 @@ const SEND = new Set([
   'ui:ready', 'ui:newTab', 'ui:closeTab', 'ui:activate', 'ui:moveTab', 'ui:tabMenu', 'ui:muteTab',
   'ui:navigate', 'ui:back', 'ui:forward', 'ui:reload', 'ui:stop', 'ui:home', 'ui:openPage',
   'ui:toggleBookmark', 'ui:toggleAdblock', 'ui:zoomReset', 'ui:focusPage', 'ui:find', 'ui:findState',
-  'ui:panic', 'ui:newTabMenu',
+  'ui:panic', 'ui:newTabMenu', 'ui:newWindow', 'ui:dropTab', 'ui:detachTab', 'ui:anchor',
 ]);
 const RECV = new Set(['tabs', 'settings', 'downloads', 'found', 'focus-omnibox', 'find-open', 'find-close', 'tor', 'update']);
 

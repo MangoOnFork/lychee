@@ -14,6 +14,20 @@ body {
   transition: opacity .4s;
 }
 #wallpaper.theme { background-size: auto; }
+#wallpaper { overflow: hidden; }
+#wallpaper video {
+  position: absolute; inset: -40px;
+  width: calc(100% + 80px); height: calc(100% + 80px);
+  object-fit: cover;
+  filter: blur(14px) grayscale(.55) brightness(.62) contrast(.95);
+  opacity: 0; transition: opacity 1.2s ease;
+}
+#wallpaper video.on { opacity: 1; }
+/* soft fog over the video so it reads gloomy and the page stays readable */
+#wallpaper:has(video)::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(200,206,212,.16) 0%, rgba(11,12,13,.15) 45%, rgba(11,12,13,.55) 100%);
+}
 #fx { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
 
 /* ---------------- generic page */
@@ -323,6 +337,9 @@ button.pill:hover { border-color: var(--border2); color: var(--text); }
 .err-card p { color: var(--muted); margin: 0 0 6px; }
 .err-card .url { font-family: var(--sans); color: var(--text); word-break: break-all; }
 .err-card .code { margin-top: 14px; font: 500 12px var(--mono); color: var(--faint); }
+.err-card .unsafe { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
+.err-card .unsafe p { font-size: 12.5px; color: var(--faint); margin-bottom: 12px; }
+.err-card .unsafe .btn { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
 .err-card .actions { display: flex; gap: 8px; margin-top: 24px; }
 
 .theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 4px 0 14px; }
@@ -333,7 +350,11 @@ button.pill:hover { border-color: var(--border2); color: var(--text); }
 }
 .theme-card:hover { transform: translateY(-2px); border-color: var(--faint); }
 .theme-card.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
-.theme-card .pv { height: 70px; position: relative; }
+.theme-card .pv { height: 70px; position: relative; overflow: hidden; }
+.theme-card .pv video {
+  position: absolute; inset: -8px; width: calc(100% + 16px); height: calc(100% + 16px);
+  object-fit: cover; filter: blur(3px) grayscale(.55) brightness(.7); pointer-events: none;
+}
 .theme-card .pv .dot { position: absolute; left: 12px; bottom: 10px; width: 18px; height: 18px; border-radius: 50%; box-shadow: 0 0 14px 2px currentColor; }
 .theme-card .pv .ic { position: absolute; right: 10px; top: 10px; color: rgba(255,255,255,.75); }
 .theme-card .pv .ic .icon { width: 16px; height: 16px; }

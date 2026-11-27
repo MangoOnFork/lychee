@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; style-src 'self' file: 'unsafe-inline'; font-src 'self' file:; script-src 'self' file:">
+<title>Permission</title>
+<link rel="stylesheet" href="../shared/base.css">
+<script src="../shared/icons.js"></script>
+<style>
+  html, body { background: transparent !important; margin: 0; overflow: hidden; }
+  body { padding: 6px 10px 14px 6px; font-family: var(--sans); color: var(--text); user-select: none; }
+  .card {
+    width: 352px;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 14px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, .45), 0 2px 6px rgba(0, 0, 0, .3);
+    padding: 16px 16px 14px;
+    animation: pop .16s cubic-bezier(.2, .8, .3, 1);
+    transform-origin: 24px 0;
+  }
+  .card.out { animation: none; }
+  @keyframes pop { from { opacity: 0; transform: translateY(-6px) scale(.97); } }
+  .head { display: flex; align-items: flex-start; gap: 10px; }
+  .head h1 { flex: 1; margin: 0; font: 650 15px/1.35 var(--sans); word-break: break-word; }
+  .head h1 b { font-weight: 750; }
+  .close {
+    flex: none; width: 28px; height: 28px; margin: -5px -6px 0 0; border-radius: 8px;
+    display: grid; place-items: center; border: 0; background: transparent; color: var(--muted); cursor: pointer;
+  }
+  .close:hover { background: var(--surface3); color: var(--text); }
+  .close svg { width: 16px; height: 16px; }
+  .rows { margin: 12px 0 14px; display: grid; gap: 9px; }
+  .row { display: flex; align-items: center; gap: 12px; font-size: 13.5px; color: var(--text); }
+  .row i { width: 30px; height: 30px; flex: none; border-radius: 9px; display: grid; place-items: center;
+    background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+  .row svg { width: 17px; height: 17px; }
+  .btns { display: grid; gap: 7px; }
+  button.b {
+    height: 36px; border-radius: 10px; border: 1px solid var(--border2);
+    background: var(--surface2); color: var(--text); font: 600 13px var(--sans); cursor: pointer;
+    transition: background .12s, border-color .12s, filter .12s;
+  }
+  button.b:hover { background: var(--surface3); }
+  button.b.primary { background: var(--accent); border-color: transparent; color: var(--accent-ink); }
+  button.b.primary:hover { filter: brightness(1.08); }
+  button.b:focus-visible, .close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="card" id="card" role="dialog" aria-labelledby="title" hidden>
+  <div class="head">
+    <h1 id="title"></h1>
+    <button class="close" id="dismiss" title="Not now (Esc)" aria-label="Not now"></button>
+  </div>
+  <div class="rows" id="rows"></div>
+  <div class="btns">
+    <button class="b primary" data-choice="allow">Allow while visiting the site</button>
+    <button class="b" data-choice="once">Allow this time</button>
+    <button class="b" data-choice="block">Never allow</button>
+  </div>
+</div>
+<script src="prompt.js"></script>
+</body>
+</html>

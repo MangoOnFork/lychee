@@ -2,7 +2,7 @@
 // Lychee: a real Chromium browser (Electron) with a custom dark UI.
 const {
   app, BrowserWindow, WebContentsView, ipcMain, session, protocol, net,
-  Menu, shell, dialog, clipboard, nativeTheme,
+  Menu, shell, dialog, clipboard, nativeTheme, screen,
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -20,6 +20,8 @@ const HOME = 'lychee://home/';
 const activeTheme = () => Themes.resolve(settings ? settings.data.theme : 'auto');
 const themeBg = () => activeTheme().palette.bg;
 const RAIL_W = 52;
+// the left sidebar can be hidden (Win+Shift+Caps Lock, or Settings > Appearance)
+const railW = () => (settings && settings.data.railHidden ? 0 : RAIL_W);
 const STRIP_H = 40;
 const TOOLBAR_H = 46;
 const FIND_H = 42;
@@ -52,9 +54,11 @@ function store(name, fallback) {
   return {
     get data() { return data; },
     set data(v) { data = v; this.save(); },
-    save() { clearTimeout(timer); timer = setTimeout(() => this.flush(), 500); },
+    // throttled, not debounced: a busy page (YouTube retitles itself constantly) must not keep pushing the write back
+    save() { if (!timer) timer = setTimeout(() => this.flush(), 500); },
     flush() {
       clearTimeout(timer);
+      timer = null;
       try {
         fs.mkdirSync(path.dirname(file), { recursive: true });
         fs.writeFileSync(file + '.tmp', JSON.stringify(data));
@@ -85,6 +89,8 @@ const DEFAULT_SETTINGS = {
   ytTheme: true,
   ytAds: true,
   ytAmbient: true,
+  ytHD: true,
+  railHidden: false,
   autoUpdate: true,
   theme: 'lychee',
   lastAutoTheme: '',
@@ -139,6 +145,8 @@ const SETTING_RULES = {
   ytTheme: isBool,
   ytAds: isBool,
   ytAmbient: isBool,
+  ytHD: isBool,
+  railHidden: isBool,
   autoUpdate: isBool,
   theme: (v) => v === 'auto' || (typeof v === 'string' && !!Themes.THEMES[v]),
   effects: isBool,
@@ -164,26 +172,37 @@ const SETTING_RULES = {
 let settings, history, bookmarks, stats, favicons, sessionStore, downloadStore;
 
 // ---------------------------------------------------------------- state
-let win = null;
-let ui = null;
+// Every window ("W") has its own tab order, active tab and UI; tabs live in one shared map and
+// point at their window (t.w), so a tab can move between windows.
+// W = { id, win, ui, order, activeId, topInset, htmlFullscreen, findOpen, closeConfirmed, prompt, anchor }
+const wins = new Map();
+let lastW = null;
 const tabs = new Map();
-let order = [];
-let activeId = null;
 let nextTabId = 1;
 const closedStack = [];
-let topInset = STRIP_H + TOOLBAR_H;
-let htmlFullscreen = false;
-let findOpen = false;
 let blocker = null;
 let blockerOn = false;
 let panic = null; // { tabId, prev, muted: [ids] } while the panic screen is up
 const httpExceptions = new Set(); // hosts the user let load over plain HTTP this run
+const certExceptions = new Set(); // hosts the user chose to visit despite a bad certificate this run
 const extraSessions = new Map(); // 'private' | 'tor' -> Session
 let baseUA = '';
-let closeConfirmed = false;
 let exitCleaned = false;
+let quitting = false;
+
+// the window the user is working in (focused, else the last one that was)
+function curW() {
+  const f = BrowserWindow.getFocusedWindow();
+  if (f && wins.has(f.id)) return wins.get(f.id);
+  if (lastW && wins.has(lastW.id)) return lastW;
+  return wins.values().next().value || null;
+}
+const allW = () => [...wins.values()];
+const wOfUi = (wc) => allW().find((W) => W.ui === wc) || null;
+const sendAllUi = (ch, data) => { for (const W of wins.values()) W.ui.send(ch, data); };
+
 const tor = new safety.Tor((st) => {
-  if (ui) ui.send('tor', st);
+  sendAllUi('tor', st);
   broadcastPages('tor', st);
   if (st.state === 'ready') {
     // tabs waiting on the "connecting to Tor" page can go now
@@ -366,6 +385,9 @@ const SKINS = [
     script: () => ((settings.data.ytAds || settings.data.ytAmbient) ? 'youtube.js' : null),
     config: () => `window.__lycheeYT = ${JSON.stringify({ ads: settings.data.ytAds, ambient: settings.data.ytAmbient })};`,
     fx: () => false, // no snow over videos
+    // main world: the player's quality API isn't reachable from an isolated world
+    main: () => 'youtube-quality.js',
+    mainConfig: () => `window.__lycheeHDOn = ${!!settings.data.ytHD};`,
   },
 ];
 const skinCache = {};
@@ -417,6 +439,11 @@ async function applySkin(t) {
   if (script) {
     if (!skinCache[script]) skinCache[script] = fs.readFileSync(path.join(SRC, 'skins', script), 'utf8');
     t.wc.executeJavaScriptInIsolatedWorld(1999, [{ code: skinCache[script] }]).catch(() => {});
+  }
+  if (skin.main) {
+    const m = skin.main();
+    if (!skinCache[m]) skinCache[m] = fs.readFileSync(path.join(SRC, 'skins', m), 'utf8');
+    t.wc.executeJavaScript(skin.mainConfig() + skinCache[m]).catch(() => {});
   }
   // theme effects (snow, leaves...) over the search page; the canvas ignores the mouse
   if (skin.fx()) {
@@ -472,14 +499,20 @@ function matchesPanic(input) {
 
 function togglePanic() {
   if (panic) { exitPanic(); return; }
-  const prev = activeId;
+  const W = curW();
+  if (!W) return;
+  const prev = W.activeId;
   const muted = [];
   for (const t of tabs.values()) if (!t.wc.isAudioMuted()) { t.wc.setAudioMuted(true); muted.push(t.id); }
-  if (htmlFullscreen) { const t = activeTab(); if (t) t.wc.executeJavaScript('document.exitFullscreen && document.exitFullscreen()').catch(() => {}); }
-  if (findOpen && ui) ui.send('find-close');
-  const pt = createTab(settings.data.panicUrl);
-  panic = { tabId: pt.id, prev, muted };
-  sendTabs();
+  if (W.htmlFullscreen) { const t = activeTab(W); if (t) t.wc.executeJavaScript('document.exitFullscreen && document.exitFullscreen()').catch(() => {}); }
+  if (W.findOpen) W.ui.send('find-close');
+  hidePrompt(W);
+  // every other window disappears until the panic screen is closed
+  const hidden = [];
+  for (const o of wins.values()) if (o !== W && o.win.isVisible()) { o.win.hide(); hidden.push(o.id); }
+  const pt = createTab(settings.data.panicUrl, { w: W });
+  panic = { tabId: pt.id, prev, muted, wid: W.id, hidden };
+  sendTabs(W);
 }
 
 function exitPanic() {
@@ -489,27 +522,30 @@ function exitPanic() {
   for (const id of p.muted) { const t = tabs.get(id); if (t) t.wc.setAudioMuted(false); }
   if (tabs.has(p.tabId)) closeTab(p.tabId, { silent: true });
   if (tabs.has(p.prev)) activate(p.prev);
+  for (const id of p.hidden) { const o = wins.get(id); if (o) o.win.showInactive(); }
   sendTabs();
 }
 
 let disguiseImg = null;
 async function applyDisguise() {
-  if (!win) return;
   const key = settings.data.disguise;
   disguiseImg = key === 'none' ? null : await safety.disguiseIcon(key);
-  if (!win) return;
   if (IS_MAC) { if (app.dock) app.dock.setIcon(disguiseImg || path.join(SHARED, 'icon.png')); }
-  else win.setIcon(disguiseImg || path.join(SHARED, 'icon.png'));
+  else for (const W of wins.values()) W.win.setIcon(disguiseImg || path.join(SHARED, 'icon.png'));
   sendTabs();
 }
 
 // ---------------------------------------------------------------- window
-function createWindow() {
-  win = new BrowserWindow({
-    width: 1360, height: 860, minWidth: 640, minHeight: 420,
+// opts.bounds places the window (a tab dragged out lands under the cursor)
+function createWindow(opts = {}) {
+  const b = opts.bounds || {};
+  const win = new BrowserWindow({
+    width: b.width || 1360, height: b.height || 860,
+    ...(b.x != null && b.y != null ? { x: b.x, y: b.y } : {}),
+    minWidth: 640, minHeight: 420,
     backgroundColor: themeBg(),
     title: 'Lychee',
-    icon: path.join(SHARED, 'icon.png'),
+    icon: disguiseImg || path.join(SHARED, 'icon.png'),
     // Windows: our own tab strip with Windows' min/max/close drawn on top (overlay).
     // Mac: the traffic lights sit at the top left, over the rail.
     titleBarStyle: IS_MAC ? 'hiddenInset' : 'hidden',
@@ -524,37 +560,79 @@ function createWindow() {
       spellcheck: false,
     },
   });
-  ui = win.webContents;
-  ui.on('before-input-event', onKey);
+  const W = {
+    id: win.id, win, ui: win.webContents, order: [], activeId: null,
+    topInset: STRIP_H + TOOLBAR_H, htmlFullscreen: false, findOpen: false, closeConfirmed: false,
+    prompt: null, anchor: null, dying: false,
+  };
+  wins.set(W.id, W);
+  if (!lastW) lastW = W;
+  W.ui.on('before-input-event', onKey);
   win.loadFile(path.join(SRC, 'ui', 'index.html'));
   win.once('ready-to-show', () => { if (!SELFTEST) win.show(); });
-  for (const ev of ['resize', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) win.on(ev, layout);
+  win.on('focus', () => { lastW = W; });
+  for (const ev of ['resize', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) win.on(ev, () => layout(W));
   win.on('close', (e) => {
-    if (settings.data.confirmClose && !closeConfirmed && !SELFTEST) {
+    if (W.dying) return; // emptied because its last tab moved to another window
+    const lastOne = wins.size === 1;
+    if (settings.data.confirmClose && !W.closeConfirmed && !SELFTEST && !quitting) {
       e.preventDefault();
+      const n = W.order.length;
       dialog.showMessageBox(win, {
-        type: 'question', buttons: ['Close Lychee', 'Cancel'], defaultId: 1, cancelId: 1, noLink: true,
-        title: 'Close Lychee?', message: `Close Lychee with ${order.length} tab${order.length === 1 ? '' : 's'} open?`,
-      }).then((r) => { if (r.response === 0 && win) { closeConfirmed = true; win.close(); } });
+        type: 'question', buttons: [lastOne ? 'Close Lychee' : 'Close window', 'Cancel'], defaultId: 1, cancelId: 1, noLink: true,
+        title: lastOne ? 'Close Lychee?' : 'Close window?',
+        message: `Close ${lastOne ? 'Lychee' : 'this window'} with ${n} tab${n === 1 ? '' : 's'} open?`,
+      }).then((r) => { if (r.response === 0 && !win.isDestroyed()) { W.closeConfirmed = true; win.close(); } });
       return;
     }
-    saveSession();
-    flushAll();
+    if (lastOne) { saveSession(); flushAll(); }
   });
-  win.on('closed', () => { win = null; ui = null; });
+  win.on('closed', () => {
+    wins.delete(W.id);
+    if (lastW === W) lastW = null;
+    // the window's tabs close with it
+    const kinds = new Set();
+    for (const id of W.order) {
+      const t = tabs.get(id);
+      if (!t) continue;
+      tabs.delete(id);
+      kinds.add(t.kind);
+      dropPrompts(t);
+      try { t.wc.close(); } catch {}
+    }
+    W.order = [];
+    for (const k of kinds) if (k !== 'normal' && ![...tabs.values()].some((x) => x.kind === k)) wipeSession(k);
+    if (panic && panic.wid === W.id) {
+      for (const id of panic.muted) { const t = tabs.get(id); if (t) t.wc.setAudioMuted(false); }
+      for (const id of panic.hidden) { const o = wins.get(id); if (o) o.win.showInactive(); }
+      panic = null;
+    }
+    if (wins.size && !quitting) saveSessionSoon();
+  });
+  return W;
 }
 
-function layout() {
-  if (!win) return;
-  const [w, h] = win.getContentSize();
-  const b = htmlFullscreen
+function layout(W) {
+  if (!W) { for (const x of wins.values()) layout(x); return; }
+  if (W.win.isDestroyed()) return;
+  const [w, h] = W.win.getContentSize();
+  const b = W.htmlFullscreen
     ? { x: 0, y: 0, width: w, height: h }
-    : { x: RAIL_W, y: topInset, width: Math.max(0, w - RAIL_W), height: Math.max(0, h - topInset) };
-  for (const t of tabs.values()) t.view.setBounds(b);
+    : { x: railW(), y: W.topInset, width: Math.max(0, w - railW()), height: Math.max(0, h - W.topInset) };
+  for (const id of W.order) { const t = tabs.get(id); if (t) t.view.setBounds(b); }
+  placePrompt(W);
+}
+
+function newWindow(url = HOME, opts = {}) {
+  const W = createWindow(opts);
+  createTab(url, { w: W, focusOmnibox: url === HOME, kind: opts.kind });
+  return W;
 }
 
 // ---------------------------------------------------------------- tabs
 function createTab(url = HOME, opts = {}) {
+  const parent = opts.afterId != null ? tabs.get(opts.afterId) : null;
+  const W = opts.w || (parent && parent.w) || curW() || createWindow();
   const kind = opts.kind === 'private' || opts.kind === 'tor' ? opts.kind : 'normal';
   const view = new WebContentsView({
     webPreferences: {
@@ -566,7 +644,7 @@ function createTab(url = HOME, opts = {}) {
   });
   view.setBackgroundColor(themeBg());
   const id = nextTabId++;
-  const tab = { id, kind, view, wc: view.webContents, title: 'New tab', favicon: null, loading: true, url, blocked: 0 };
+  const tab = { id, kind, view, wc: view.webContents, title: 'New tab', favicon: null, loading: true, url, blocked: 0, w: W };
   if (kind === 'tor') {
     // keep WebRTC from leaking the real IP around the proxy
     tab.wc.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
@@ -576,82 +654,190 @@ function createTab(url = HOME, opts = {}) {
     }
   }
   tabs.set(id, tab);
-  const after = opts.afterId != null ? order.indexOf(opts.afterId) : -1;
+  const after = parent && parent.w === W ? W.order.indexOf(opts.afterId) : -1;
   if (after >= 0) {
     // keep tabs opened from the same parent in order, like Chrome
     let i = after + 1;
-    while (i < order.length && tabs.get(order[i]).openerId === opts.afterId) i++;
+    while (i < W.order.length && tabs.get(W.order[i]).openerId === opts.afterId) i++;
     tab.openerId = opts.afterId;
-    order.splice(i, 0, id);
-  } else order.push(id);
-  win.contentView.addChildView(view);
+    W.order.splice(i, 0, id);
+  } else W.order.push(id);
+  W.win.contentView.addChildView(view);
   view.setVisible(false);
   wireTab(tab);
-  layout();
+  layout(W);
+  // opened in the background (middle click etc.): videos wait until the tab is first opened, like Chrome
+  if (opts.activate === false) holdMedia(tab);
   loadInTab(tab, url);
   if (opts.activate !== false) activate(id, { focusOmnibox: opts.focusOmnibox });
-  else sendTabsSoon();
+  else { sendTabsSoon(); raisePrompt(W); }
   saveSessionSoon();
   return tab;
+}
+
+// ---- background tabs: hold autoplay until the tab is shown
+// The script runs in an isolated world, so pages can't see or undo it. Media events don't bubble,
+// but a capturing listener on the document still sees every play().
+const HOLD_JS = `(() => {
+  if (window.__lycheeHold) { window.__lycheeHold.on = true; return; }
+  const H = window.__lycheeHold = { on: true, paused: new Set() };
+  const stop = (e) => { const m = e.target; if (H.on && m instanceof HTMLMediaElement) { H.paused.add(m); m.pause(); } };
+  document.addEventListener('play', stop, true);
+  document.addEventListener('playing', stop, true);
+  for (const m of document.querySelectorAll('video, audio')) if (!m.paused) { H.paused.add(m); m.pause(); }
+})()`;
+const RELEASE_JS = `(() => { const H = window.__lycheeHold; if (!H) return; H.on = false;
+  for (const m of H.paused) if (m.isConnected) m.play().catch(() => {}); H.paused.clear(); })()`;
+const MEDIA_WORLD = 1998;
+
+function toggleMute(t) {
+  // a held background tab is muted by Lychee but shown as unmuted, so clicking mute keeps it muted for real
+  if (t.holdMuted) t.holdMuted = false;
+  else t.wc.setAudioMuted(!t.wc.isAudioMuted());
+  sendTabsSoon();
+}
+function holdMedia(t) {
+  t.holdMedia = true;
+  if (!t.wc.isAudioMuted()) { t.wc.setAudioMuted(true); t.holdMuted = true; } // no sound blip before the script lands
+}
+function injectHold(t) {
+  if (t.holdMedia) t.wc.executeJavaScriptInIsolatedWorld(MEDIA_WORLD, [{ code: HOLD_JS }]).catch(() => {});
+}
+function releaseMedia(t) {
+  if (!t.holdMedia) return;
+  t.holdMedia = false;
+  if (t.holdMuted) { t.holdMuted = false; t.wc.setAudioMuted(false); }
+  t.wc.executeJavaScriptInIsolatedWorld(MEDIA_WORLD, [{ code: RELEASE_JS }]).catch(() => {});
 }
 
 function activate(id, opts = {}) {
   const t = tabs.get(id);
   if (!t) return;
-  if (activeId !== id && findOpen) { const old = tabs.get(activeId); if (old) old.wc.stopFindInPage('clearSelection'); }
-  activeId = id;
-  for (const x of tabs.values()) x.view.setVisible(x.id === id);
-  sendTabs();
+  const W = t.w;
+  releaseMedia(t);
+  if (W.activeId !== id && W.findOpen) { const old = tabs.get(W.activeId); if (old) old.wc.stopFindInPage('clearSelection'); }
+  W.activeId = id;
+  for (const x of W.order) { const o = tabs.get(x); if (o) o.view.setVisible(x === id); }
+  sendTabs(W);
   saveSessionSoon();
-  if (opts.focusOmnibox) focusOmnibox();
+  refreshPrompt(W);
+  if (opts.focusOmnibox) focusOmnibox(W);
   else if (!opts.keepFocus) t.wc.focus();
 }
 
 function closeTab(id, opts = {}) {
   const t = tabs.get(id);
   if (!t) return;
+  const W = t.w;
   if (panic && panic.tabId === id && !opts.silent) { exitPanic(); return; }
-  const idx = order.indexOf(id);
+  const idx = W.order.indexOf(id);
   const url = realUrl(t.wc.getURL() || t.url);
   // private/Tor tabs leave no trace, not even in "reopen closed tab"
   if (!opts.silent && t.kind === 'normal') {
     closedStack.push({ url, index: idx });
     if (closedStack.length > 30) closedStack.shift();
   }
-  order.splice(idx, 1);
+  W.order.splice(idx, 1);
   tabs.delete(id);
   for (const x of tabs.values()) if (x.openerId === id) x.openerId = null;
-  win.contentView.removeChildView(t.view);
+  dropPrompts(t);
+  W.win.contentView.removeChildView(t.view);
   try { t.wc.close(); } catch {}
   if (t.kind !== 'normal' && ![...tabs.values()].some((x) => x.kind === t.kind)) wipeSession(t.kind);
-  if (!order.length) { createTab(HOME, { focusOmnibox: true }); return; }
-  if (activeId === id) {
-    const opener = t.openerId && tabs.has(t.openerId) ? t.openerId : null;
-    activate(opener || order[Math.min(idx, order.length - 1)]);
-  } else sendTabs();
+  if (!W.order.length) {
+    // last tab of a window: the window goes too, unless it's the only one left
+    if (wins.size > 1) { W.dying = true; W.win.close(); saveSessionSoon(); return; }
+    createTab(HOME, { focusOmnibox: true, w: W });
+    return;
+  }
+  if (W.activeId === id) {
+    const opener = t.openerId && tabs.has(t.openerId) && tabs.get(t.openerId).w === W ? t.openerId : null;
+    activate(opener || W.order[Math.min(idx, W.order.length - 1)]);
+  } else sendTabs(W);
   saveSessionSoon();
 }
 
-function reopenTab() {
+function reopenTab(W = curW()) {
   const c = closedStack.pop();
   if (!c) return;
-  const t = createTab(c.url);
-  const i = order.indexOf(t.id);
-  order.splice(i, 1);
-  order.splice(Math.min(c.index, order.length), 0, t.id);
-  sendTabs();
+  const t = createTab(c.url, { w: W });
+  const i = t.w.order.indexOf(t.id);
+  t.w.order.splice(i, 1);
+  t.w.order.splice(Math.min(c.index, t.w.order.length), 0, t.id);
+  sendTabs(t.w);
 }
 
 function moveTab(id, toIndex) {
+  const t = tabs.get(id);
+  if (!t) return;
+  const order = t.w.order;
   const i = order.indexOf(id);
   if (i < 0) return;
   order.splice(i, 1);
   order.splice(Math.max(0, Math.min(toIndex, order.length)), 0, id);
-  sendTabs();
+  sendTabs(t.w);
   saveSessionSoon();
 }
 
-const activeTab = () => tabs.get(activeId);
+// a tab dropped onto another window's tab strip (or dragged out into a new window)
+function moveTabToWindow(id, W2, index) {
+  const t = tabs.get(id);
+  if (!t || !W2 || W2.win.isDestroyed()) return;
+  const W1 = t.w;
+  if (W1 === W2) { if (index != null) moveTab(id, index); return; }
+  if (panic && panic.tabId === id) return;
+  const i = W1.order.indexOf(id);
+  W1.order.splice(i, 1);
+  W1.win.contentView.removeChildView(t.view);
+  t.w = W2;
+  t.openerId = null;
+  for (const x of tabs.values()) if (x.openerId === id) x.openerId = null;
+  const at = index == null ? W2.order.length : Math.max(0, Math.min(index, W2.order.length));
+  W2.order.splice(at, 0, id);
+  W2.win.contentView.addChildView(t.view);
+  layout(W2);
+  activate(id);
+  if (!W2.win.isVisible() && !SELFTEST) W2.win.show();
+  if (!SELFTEST) W2.win.focus();
+  // the window it came from
+  if (!W1.order.length) { W1.dying = true; W1.win.close(); }
+  else {
+    if (W1.activeId === id) activate(W1.order[Math.min(i, W1.order.length - 1)], { keepFocus: true });
+    else sendTabs(W1);
+    refreshPrompt(W1);
+  }
+  saveSessionSoon();
+}
+
+// drag a tab off the strip and let go: it becomes its own window under the cursor, like Chrome
+function detachTab(id, at) {
+  const t = tabs.get(id);
+  if (!t) return null;
+  const W1 = t.w;
+  const nb = W1.win.getNormalBounds();
+  const p = at || screen.getCursorScreenPoint();
+  // the dragged tab lands roughly under the cursor (tabs start right of the rail)
+  const bounds = { x: Math.round(p.x - railW() - 90), y: Math.round(p.y - 16), width: nb.width, height: nb.height };
+  if (W1.order.length === 1) {
+    // it's the window's only tab: just move the window there
+    if (W1.win.isMaximized()) W1.win.unmaximize();
+    W1.win.setBounds(bounds);
+    return W1;
+  }
+  const W2 = createWindow({ bounds });
+  moveTabToWindow(id, W2, 0);
+  return W2;
+}
+
+function moveToNewWindow(id) {
+  const t = tabs.get(id);
+  if (!t || t.w.order.length < 2) return;
+  const nb = t.w.win.getNormalBounds();
+  const W2 = createWindow({ bounds: { x: nb.x + 40, y: nb.y + 40, width: nb.width, height: nb.height } });
+  moveTabToWindow(id, W2, 0);
+}
+
+const activeTab = (W = curW()) => (W ? tabs.get(W.activeId) : undefined);
 
 // last private/Tor tab closed: throw away everything that session collected
 function wipeSession(kind) {
@@ -680,7 +866,7 @@ function tabState(t) {
     canFwd: nav.canGoForward(),
     blocked: t.blocked,
     audible: wc.isCurrentlyAudible(),
-    muted: wc.isAudioMuted(),
+    muted: wc.isAudioMuted() && !t.holdMuted,
     zoom: Math.round(wc.getZoomFactor() * 100),
     bookmarked: bookmarks.data.some((b) => b.url === url),
     secure: url.startsWith('https://'),
@@ -689,20 +875,21 @@ function tabState(t) {
   };
 }
 
-function sendTabs() {
-  if (!ui) return;
-  ui.send('tabs', {
-    tabs: order.map((id) => tabState(tabs.get(id))), activeId,
+function sendTabs(W) {
+  if (!W) { for (const x of wins.values()) sendTabs(x); return; }
+  if (W.win.isDestroyed()) return;
+  W.ui.send('tabs', {
+    tabs: W.order.map((id) => tabState(tabs.get(id))), activeId: W.activeId,
     adblock: settings.data.adblock && blockerOn,
-    panicTabId: panic ? panic.tabId : null,
+    panicTabId: panic && panic.wid === W.id ? panic.tabId : null,
     tor: tor.state,
   });
-  const t = activeTab();
-  if (!t || !win) return;
+  const t = activeTab(W);
+  if (!t) return;
   const d = safety.DISGUISES[settings.data.disguise];
-  if (d && d.title) win.setTitle(d.title);
-  else if (t.kind !== 'normal') win.setTitle(t.kind === 'tor' ? 'Lychee (Tor)' : 'Lychee (Private)');
-  else win.setTitle(t.title ? `${t.title} - Lychee` : 'Lychee');
+  if (d && d.title) W.win.setTitle(d.title);
+  else if (t.kind !== 'normal') W.win.setTitle(t.kind === 'tor' ? 'Lychee (Tor)' : 'Lychee (Private)');
+  else W.win.setTitle(t.title ? `${t.title} - Lychee` : 'Lychee');
 }
 let tabsTimer = null;
 function sendTabsSoon() {
@@ -733,7 +920,7 @@ function wireTab(t) {
   // sign-in popups ("Sign in with Google" windows) get the same treatment
   wc.on('did-create-window', (w) => googleUA(w.webContents));
   wc.on('did-start-navigation', (e, url, isInPlace, isMainFrame) => {
-    if (isMainFrame && !isInPlace) { t.blocked = 0; t.favicon = null; sendTabsSoon(); }
+    if (isMainFrame && !isInPlace) { t.blocked = 0; t.favicon = null; dropPrompts(t); sendTabsSoon(); }
     // catches every way into AI chat: links, redirects, in-page (pushState) routing
     if (isMainFrame && isDuckAi(url)) setImmediate(() => wc.loadURL(blockedAiPage(url)).catch(() => {}));
   });
@@ -742,7 +929,9 @@ function wireTab(t) {
   });
   // site skins: a new document drops old inserted CSS, so inject on every dom-ready
   wc.on('did-navigate', () => { t.skinKeys = []; });
-  wc.on('dom-ready', () => applySkin(t));
+  wc.on('dom-ready', () => { injectHold(t); applySkin(t); });
+  wc.on('did-start-navigation', (e, url, isInPlace, isMainFrame) => { if (isMainFrame && !isInPlace) setImmediate(() => injectHold(t)); });
+  wc.on('media-started-playing', () => injectHold(t));
   wc.on('did-navigate', (e, url) => {
     t.url = url;
     if (!url.startsWith('lychee://error')) t.upgradedFrom = null;
@@ -795,10 +984,10 @@ function wireTab(t) {
   });
   wc.on('audio-state-changed', sendTabsSoon);
   wc.on('zoom-changed', (e, dir) => zoom(dir === 'in' ? 1 : -1, t));
-  wc.on('enter-html-full-screen', () => { htmlFullscreen = true; layout(); });
-  wc.on('leave-html-full-screen', () => { htmlFullscreen = false; layout(); });
+  wc.on('enter-html-full-screen', () => { t.w.htmlFullscreen = true; layout(t.w); });
+  wc.on('leave-html-full-screen', () => { t.w.htmlFullscreen = false; layout(t.w); });
   wc.on('found-in-page', (e, r) => {
-    if (t.id === activeId && ui) ui.send('found', { active: r.activeMatchOrdinal, total: r.matches });
+    if (t.id === t.w.activeId) t.w.ui.send('found', { active: r.activeMatchOrdinal, total: r.matches });
   });
   wc.setWindowOpenHandler(({ url, disposition }) => {
     if (/^javascript:/i.test(url)) return { action: 'deny' };
@@ -892,26 +1081,38 @@ function pageMenu(t, p) {
   items.push({ label: 'Inspect', click: () => { wc.inspectElement(p.x, p.y); } });
   // trim doubled separators
   const clean = items.filter((it, i, a) => !(it.type === 'separator' && (i === 0 || a[i - 1].type === 'separator')));
-  Menu.buildFromTemplate(clean).popup({ window: win });
+  Menu.buildFromTemplate(clean).popup({ window: t.w.win });
 }
 
 function tabMenu(id) {
   const t = tabs.get(id);
   if (!t) return;
+  const W = t.w;
+  const order = W.order;
   const idx = order.indexOf(id);
+  const others = allW().filter((o) => o !== W);
   Menu.buildFromTemplate([
     { label: 'New tab to the right', click: () => createTab(HOME, { afterId: id, focusOmnibox: true }) },
     { type: 'separator' },
     { label: 'Reload', click: () => reload(t) },
     { label: 'Duplicate', click: () => createTab(realUrl(t.wc.getURL()), { afterId: id, kind: t.kind }) },
-    { label: t.wc.isAudioMuted() ? 'Unmute tab' : 'Mute tab', click: () => { t.wc.setAudioMuted(!t.wc.isAudioMuted()); sendTabsSoon(); } },
+    { label: t.wc.isAudioMuted() && !t.holdMuted ? 'Unmute tab' : 'Mute tab', click: () => { toggleMute(t); } },
+    { type: 'separator' },
+    { label: 'Move tab to new window', enabled: order.length > 1, click: () => moveToNewWindow(id) },
+    {
+      label: 'Move tab to another window', visible: others.length > 0,
+      submenu: others.map((o, i) => {
+        const a = activeTab(o);
+        return { label: `${a && a.title ? a.title : 'Window ' + (i + 1)} (${o.order.length} tab${o.order.length === 1 ? '' : 's'})`, click: () => moveTabToWindow(id, o) };
+      }),
+    },
     { type: 'separator' },
     { label: 'Close tab', click: () => closeTab(id) },
-    { label: 'Close other tabs', enabled: order.length > 1, click: () => order.filter((x) => x !== id).forEach(closeTab) },
-    { label: 'Close tabs to the right', enabled: idx < order.length - 1, click: () => order.slice(idx + 1).forEach(closeTab) },
+    { label: 'Close other tabs', enabled: order.length > 1, click: () => order.filter((x) => x !== id).forEach((x) => closeTab(x)) },
+    { label: 'Close tabs to the right', enabled: idx < order.length - 1, click: () => order.slice(idx + 1).forEach((x) => closeTab(x)) },
     { type: 'separator' },
-    { label: 'Reopen closed tab', enabled: closedStack.length > 0, click: reopenTab },
-  ]).popup({ window: win });
+    { label: 'Reopen closed tab', enabled: closedStack.length > 0, click: () => reopenTab(W) },
+  ]).popup({ window: W.win });
 }
 
 function reload(t = activeTab(), hard = false) {
@@ -939,19 +1140,21 @@ function zoom(dir, t = activeTab()) {
   sendTabsSoon();
 }
 
-function focusOmnibox() {
-  if (!ui) return;
-  ui.focus();
-  ui.send('focus-omnibox');
+function focusOmnibox(W = curW()) {
+  if (!W) return;
+  W.ui.focus();
+  W.ui.send('focus-omnibox');
 }
 
-function openPage(name) {
+// opts.newTab (keyboard, like Chrome): never reuse the current tab, just switch to or open the page's tab
+function openPage(name, W = curW(), opts = {}) {
+  if (!W) return;
   const url = `lychee://${name}/`;
-  const existing = order.map((id) => tabs.get(id)).find((t) => internalPage(t.wc.getURL()) === name);
+  const existing = W.order.map((id) => tabs.get(id)).find((t) => internalPage(t.wc.getURL()) === name);
   if (existing) { activate(existing.id); return; }
-  const t = activeTab();
-  if (t && internalPage(t.wc.getURL()) === 'home') { t.wc.loadURL(url).catch(() => {}); return; }
-  createTab(url, { afterId: activeId });
+  const t = activeTab(W);
+  if (!opts.newTab && t && internalPage(t.wc.getURL()) === 'home') { t.wc.loadURL(url).catch(() => {}); return; }
+  createTab(url, { afterId: W.activeId, w: W });
 }
 
 function toggleBookmark(t = activeTab()) {
@@ -972,53 +1175,66 @@ function toggleDevtools(t = activeTab()) {
   else t.wc.openDevTools({ mode: 'detach' });
 }
 
-function openFind() {
-  if (!ui) return;
-  ui.focus();
-  ui.send('find-open');
+function openFind(W = curW()) {
+  if (!W) return;
+  W.ui.focus();
+  W.ui.send('find-open');
 }
 
 // ---------------------------------------------------------------- keyboard
 function onKey(e, input) {
   if (input.type !== 'keyDown') return;
   if (matchesPanic(input)) { e.preventDefault(); if (!input.isAutoRepeat) togglePanic(); return; }
+  // Win+Shift+Caps Lock (Cmd+Shift+Caps Lock on Mac): hide or show the left sidebar
+  if (input.meta && input.shift && input.code === 'CapsLock') {
+    e.preventDefault();
+    if (!input.isAutoRepeat) setSetting('railHidden', !settings.data.railHidden);
+    return;
+  }
+  // which window the key was pressed in: its UI, or one of its tabs
+  const fromTab = [...tabs.values()].find((x) => x.wc === e.sender);
+  const W = wOfUi(e.sender) || (fromTab && fromTab.w) || curW();
+  if (!W) return;
   const ctrl = input.control || input.meta;
   const { shift, alt } = input;
   const k = (input.key || '').toLowerCase();
+  const at = () => activeTab(W);
+  const order = W.order;
   let act = null;
-  if (alt && shift && !ctrl && k === 'n') act = () => createTab(HOME, { kind: 'tor', focusOmnibox: true });
+  if (alt && shift && !ctrl && k === 'n') act = () => createTab(HOME, { kind: 'tor', focusOmnibox: true, w: W });
   else if (ctrl && !alt) {
-    if (k === 'n' && shift) act = () => createTab(HOME, { kind: 'private', focusOmnibox: true });
-    else if (k === 't' && shift) act = reopenTab;
-    else if (k === 't') act = () => createTab(HOME, { focusOmnibox: true });
-    else if (k === 'w' || k === 'f4') act = () => closeTab(activeId);
+    if (k === 'n' && shift) act = () => createTab(HOME, { kind: 'private', focusOmnibox: true, w: W });
+    else if (k === 'n') act = () => newWindow();
+    else if (k === 't' && shift) act = () => reopenTab(W);
+    else if (k === 't') act = () => createTab(HOME, { focusOmnibox: true, w: W });
+    else if (k === 'w' || k === 'f4') act = () => closeTab(W.activeId);
     else if (k === 'tab' || k === 'pagedown' || k === 'pageup') {
       const d = (k === 'pageup' || (k === 'tab' && shift)) ? -1 : 1;
-      act = () => { const i = order.indexOf(activeId); activate(order[(i + d + order.length) % order.length]); };
+      act = () => { const i = order.indexOf(W.activeId); activate(order[(i + d + order.length) % order.length]); };
     } else if (/^[1-9]$/.test(k)) act = () => activate(k === '9' ? order[order.length - 1] : order[+k - 1]);
-    else if (k === 'l') act = focusOmnibox;
-    else if (k === 'r') act = () => reload(activeTab(), shift);
-    else if (k === 'f') act = openFind;
-    else if (k === 'd') act = () => toggleBookmark();
-    else if (k === 'h') act = () => openPage('history');
-    else if (k === 'j') act = () => openPage('downloads');
-    else if (k === '=' || k === '+') act = () => zoom(1);
-    else if (k === '-' || k === '_') act = () => zoom(-1);
-    else if (k === '0') act = () => zoom(0);
-    else if (k === 'i' && shift) act = () => toggleDevtools();
-    else if (k === 'p') act = () => { const t = activeTab(); if (t) t.wc.print(); };
-    else if (k === ',') act = () => openPage('settings');
+    else if (k === 'l') act = () => focusOmnibox(W);
+    else if (k === 'r') act = () => reload(at(), shift);
+    else if (k === 'f') act = () => openFind(W);
+    else if (k === 'd') act = () => toggleBookmark(at());
+    else if (k === 'h') act = () => openPage('history', W, { newTab: true });
+    else if (k === 'j') act = () => openPage('downloads', W, { newTab: true });
+    else if (k === '=' || k === '+') act = () => zoom(1, at());
+    else if (k === '-' || k === '_') act = () => zoom(-1, at());
+    else if (k === '0') act = () => zoom(0, at());
+    else if (k === 'i' && shift) act = () => toggleDevtools(at());
+    else if (k === 'p') act = () => { const t = at(); if (t) t.wc.print(); };
+    else if (k === ',') act = () => openPage('settings', W);
   } else if (alt && !ctrl) {
-    if (k === 'arrowleft') act = () => { const t = activeTab(); if (t && t.wc.navigationHistory.canGoBack()) t.wc.navigationHistory.goBack(); };
-    else if (k === 'arrowright') act = () => { const t = activeTab(); if (t && t.wc.navigationHistory.canGoForward()) t.wc.navigationHistory.goForward(); };
-    else if (k === 'd') act = focusOmnibox;
-    else if (k === 'home') act = () => { const t = activeTab(); if (t) t.wc.loadURL(HOME).catch(() => {}); };
+    if (k === 'arrowleft') act = () => { const t = at(); if (t && t.wc.navigationHistory.canGoBack()) t.wc.navigationHistory.goBack(); };
+    else if (k === 'arrowright') act = () => { const t = at(); if (t && t.wc.navigationHistory.canGoForward()) t.wc.navigationHistory.goForward(); };
+    else if (k === 'd') act = () => focusOmnibox(W);
+    else if (k === 'home') act = () => { const t = at(); if (t) t.wc.loadURL(HOME).catch(() => {}); };
   } else if (!ctrl && !alt) {
-    if (k === 'f5') act = () => reload(activeTab(), shift);
-    else if (k === 'f6') act = focusOmnibox;
-    else if (k === 'f11') act = () => win && win.setFullScreen(!win.isFullScreen());
-    else if (k === 'f12') act = () => toggleDevtools();
-    else if (k === 'escape' && findOpen && e.sender !== ui) act = () => ui && ui.send('find-close');
+    if (k === 'f5') act = () => reload(at(), shift);
+    else if (k === 'f6') act = () => focusOmnibox(W);
+    else if (k === 'f11') act = () => W.win.setFullScreen(!W.win.isFullScreen());
+    else if (k === 'f12') act = () => toggleDevtools(at());
+    else if (k === 'escape' && W.findOpen && e.sender !== W.ui) act = () => W.ui.send('find-close');
   }
   if (act) { e.preventDefault(); act(); }
 }
@@ -1101,8 +1317,8 @@ function pushDownloads(now) {
       const rec = active.reduce((a, d) => a + d.received, 0);
       frac = tot > 0 ? rec / tot : 2; // 2 = indeterminate
     }
-    if (win) win.setProgressBar(frac);
-    if (ui) ui.send('downloads', { active: active.length, progress: frac, recent: list[0] ? list[0].id : null });
+    for (const W of wins.values()) W.win.setProgressBar(frac);
+    sendAllUi('downloads', { active: active.length, progress: frac, recent: list[0] ? list[0].id : null });
     broadcastPages('downloads', list);
   };
   if (now) { clearTimeout(dlTimer); send(); }
@@ -1176,11 +1392,21 @@ function downloadAction(id, act) {
 }
 
 // ---------------------------------------------------------------- permissions
+// Requests show as a small card hanging from the address bar, like Chrome (not a system dialog).
+// The card is its own little WebContentsView laid over the page, one per window.
 const ALWAYS_OK = new Set(['fullscreen', 'clipboard-sanitized-write', 'pointerLock', 'keyboardLock']);
-const PERM_LABEL = {
-  geolocation: 'your location', notifications: 'to show notifications', midi: 'MIDI devices', midiSysex: 'MIDI devices',
-  'clipboard-read': 'your clipboard', 'display-capture': 'to share your screen', openExternal: 'to open an app on your computer',
-  'idle-detection': 'to know when you are idle', 'window-management': 'to manage your windows',
+const PERM_INFO = {
+  geolocation: { what: 'Know your location', icon: 'pin' },
+  notifications: { what: 'Show notifications', icon: 'bell' },
+  midi: { what: 'Use your MIDI devices', icon: 'keyboard' },
+  midiSysex: { what: 'Use your MIDI devices', icon: 'keyboard' },
+  'clipboard-read': { what: 'See text and images copied to the clipboard', icon: 'copy' },
+  'display-capture': { what: 'Share your screen', icon: 'monitor' },
+  openExternal: { what: 'Open an app on your computer', icon: 'external' },
+  'idle-detection': { what: 'Know when you are actively using this device', icon: 'clock' },
+  'window-management': { what: 'Manage windows on all your displays', icon: 'monitor' },
+  camera: { what: 'Use your camera', icon: 'camera' },
+  microphone: { what: 'Use your microphone', icon: 'mic' },
 };
 
 function permKey(origin, permission, details) {
@@ -1190,6 +1416,89 @@ function permKey(origin, permission, details) {
     p = t.includes('video') && t.includes('audio') ? 'camera+microphone' : t.includes('video') ? 'camera' : 'microphone';
   }
   return `${origin}|${p}`;
+}
+
+const pendingPerms = []; // { id, tabId, key, host, rows: [{what, icon}], cb }
+let permSeq = 1;
+
+function ensurePrompt(W) {
+  if (W.prompt) return W.prompt;
+  const view = new WebContentsView({
+    webPreferences: { preload: path.join(SRC, 'preload-prompt.js'), contextIsolation: true, sandbox: true, spellcheck: false },
+  });
+  view.setBackgroundColor('#00000000');
+  view.setVisible(false);
+  W.prompt = { view, shown: null, h: 190, ready: false };
+  view.webContents.on('before-input-event', onKey);
+  view.webContents.once('did-finish-load', () => { if (W.prompt) { W.prompt.ready = true; refreshPrompt(W); } });
+  view.webContents.loadFile(path.join(SRC, 'ui', 'prompt.html'));
+  return W.prompt;
+}
+
+function placePrompt(W) {
+  if (!W.prompt || W.win.isDestroyed()) return;
+  const a = W.anchor || { x: railW() + 112, y: STRIP_H + TOOLBAR_H - 8 };
+  const x = W.htmlFullscreen ? 12 : a.x;
+  const y = W.htmlFullscreen ? 12 : a.y;
+  W.prompt.view.setBounds({ x, y, width: 372, height: W.prompt.h });
+}
+
+// keep the card above the tab views (re-adding a view moves it to the top)
+function raisePrompt(W) {
+  if (W && W.prompt && W.prompt.shown != null && !W.win.isDestroyed()) W.win.contentView.addChildView(W.prompt.view);
+}
+
+function hidePrompt(W) {
+  if (W && W.prompt) { W.prompt.view.setVisible(false); W.prompt.shown = null; }
+}
+
+function refreshPrompt(W) {
+  if (!W || W.win.isDestroyed()) return;
+  const p = pendingPerms.find((x) => x.tabId === W.activeId);
+  if (!p || (panic && panic.wid === W.id)) { hidePrompt(W); return; }
+  const P = ensurePrompt(W);
+  if (!P.ready) return;
+  if (P.shown !== p.id) {
+    P.shown = p.id;
+    const th = activeTheme();
+    P.view.webContents.send('prompt', { id: p.id, host: p.host, rows: p.rows, palette: th.palette, accent: settings.data.accent });
+  }
+  W.win.contentView.addChildView(P.view);
+  placePrompt(W);
+  P.view.setVisible(true);
+  P.view.webContents.focus();
+}
+
+// choice: 'allow' (remember), 'once' (this time), 'block' (remember), 'dismiss' (no this time)
+function answerPrompt(W, id, choice) {
+  const i = pendingPerms.findIndex((x) => x.id === id);
+  if (i < 0) return;
+  const p = pendingPerms[i];
+  pendingPerms.splice(i, 1);
+  const ok = choice === 'allow' || choice === 'once';
+  if (choice === 'allow' || choice === 'block') {
+    settings.data.sitePermissions[p.key] = ok;
+    settings.save();
+    broadcastPages('settings', publicSettings());
+  }
+  p.cb(ok);
+  // the same site asking for the same thing again meanwhile gets the same answer
+  for (let j = pendingPerms.length - 1; j >= 0; j--) {
+    const q = pendingPerms[j];
+    if (q.key === p.key && q.tabId === p.tabId) { pendingPerms.splice(j, 1); q.cb(ok); }
+  }
+  refreshPrompt(W);
+  const t = activeTab(W);
+  if (t && !W.prompt.shown) t.wc.focus();
+}
+
+// tab closed or navigated away: its open requests are answered "no"
+function dropPrompts(t) {
+  let any = false;
+  for (let i = pendingPerms.length - 1; i >= 0; i--) {
+    if (pendingPerms[i].tabId === t.id) { const p = pendingPerms[i]; pendingPerms.splice(i, 1); p.cb(false); any = true; }
+  }
+  if (any && t.w) refreshPrompt(t.w);
 }
 
 function wirePermissions(ses) {
@@ -1202,25 +1511,25 @@ function wirePermissions(ses) {
     const key = permKey(origin, permission, details);
     const saved = settings.data.sitePermissions[key];
     if (typeof saved === 'boolean') return cb(saved);
-    let what = PERM_LABEL[permission] || permission;
-    if (permission === 'media') what = 'your ' + key.split('|')[1].replace('+', ' and ');
+    const kind = key.split('|')[1];
+    const rows = kind === 'camera+microphone' ? [PERM_INFO.camera, PERM_INFO.microphone]
+      : [PERM_INFO[kind] || { what: `Use ${kind}`, icon: 'info' }];
     if (permission === 'openExternal' && details && details.externalURL) {
-      what = `to open "${details.externalURL.split(':')[0]}:" links in another app`;
+      rows[0] = { what: `Open "${details.externalURL.split(':')[0]}:" links in another app`, icon: 'external' };
     }
-    if (!win) return cb(false);
-    dialog.showMessageBox(win, {
-      type: 'question', buttons: ['Allow', 'Block'], defaultId: 1, cancelId: 1,
-      title: 'Permission request', message: `${hostOf(url)} wants ${what}`,
-      checkboxLabel: 'Remember for this site', checkboxChecked: true, noLink: true,
-    }).then((r) => {
-      const ok = r.response === 0;
-      if (r.checkboxChecked) {
-        settings.data.sitePermissions[key] = ok;
-        settings.save();
-        broadcastPages('settings', publicSettings());
-      }
-      cb(ok);
-    }).catch(() => cb(false));
+    const t = [...tabs.values()].find((x) => x.wc === wc);
+    if (t) {
+      pendingPerms.push({ id: permSeq++, tabId: t.id, key, host: hostOf(url), rows, cb });
+      refreshPrompt(t.w);
+      return;
+    }
+    // a popup window (not a tab): fall back to a plain dialog on it
+    const bw = BrowserWindow.fromWebContents(wc);
+    if (!bw) return cb(false);
+    dialog.showMessageBox(bw, {
+      type: 'question', buttons: ['Allow', 'Block'], defaultId: 1, cancelId: 1, noLink: true,
+      title: 'Permission request', message: `${hostOf(url)} wants to: ${rows.map((r) => r.what.toLowerCase()).join(', ')}`,
+    }).then((r) => cb(r.response === 0)).catch(() => cb(false));
   });
   ses.setPermissionCheckHandler((wc, permission, origin) => {
     if (ALWAYS_OK.has(permission)) return true;
@@ -1336,9 +1645,10 @@ function publicSettings() {
 // ---------------------------------------------------------------- themes
 function applyWindowTheme() {
   const th = activeTheme();
-  if (win) {
-    win.setBackgroundColor(th.palette.bg);
-    if (!IS_MAC) { try { win.setTitleBarOverlay({ color: th.palette.bg, symbolColor: th.palette.muted, height: STRIP_H }); } catch {} }
+  for (const W of wins.values()) {
+    W.win.setBackgroundColor(th.palette.bg);
+    if (!IS_MAC) { try { W.win.setTitleBarOverlay({ color: th.palette.bg, symbolColor: th.palette.muted, height: STRIP_H }); } catch {} }
+    if (W.prompt && W.prompt.shown) { W.prompt.shown = null; refreshPrompt(W); } // re-send with the new colours
   }
   for (const t of tabs.values()) t.view.setBackgroundColor(th.palette.bg);
 }
@@ -1352,8 +1662,9 @@ function adoptThemeAccent() {
 }
 
 async function pickWallpaper() {
-  if (!win) return false;
-  const r = await dialog.showOpenDialog(win, {
+  const W = curW();
+  if (!W) return false;
+  const r = await dialog.showOpenDialog(W.win, {
     title: 'Choose a wallpaper', properties: ['openFile'],
     filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'] }],
   });
@@ -1386,59 +1697,93 @@ function setSetting(key, value) {
   if (key === 'disguise') applyDisguise();
   if (key === 'autoUpdate' && updater) updater.start(value);
   if (key === 'theme') { adoptThemeAccent(); applyWindowTheme(); }
-  if (['theme', 'effects', 'effectAmount', 'effectsOnSearch', 'ytTheme', 'ytAds', 'ytAmbient'].includes(key)) reskinAll();
+  if (['theme', 'effects', 'effectAmount', 'effectsOnSearch', 'ytTheme', 'ytAds', 'ytAmbient', 'ytHD'].includes(key)) reskinAll();
   if (key === 'searchSkin' || key === 'accent') reskinAll();
   // the skin script renamed text in place, so un-skinned search pages need a fresh load
   if (key === 'searchSkin' && !value) for (const t of tabs.values()) if (DDG_RE.test(t.wc.getURL() || '')) t.wc.reload();
   if (key === 'uaPreset') applyUA();
   if (key === 'httpsOnly' && !value) httpExceptions.clear();
-  if (ui) ui.send('settings', publicSettings());
+  if (key === 'railHidden') layout();
+  sendAllUi('settings', publicSettings());
   broadcastPages('settings', publicSettings());
   return true;
 }
 
 // ---------------------------------------------------------------- IPC
 function wireIpc() {
-  const fromUi = (fn) => (e, ...a) => { if (e.sender === ui) return fn(...a); };
-  ipcMain.on('ui:ready', fromUi(() => { ui.send('settings', publicSettings()); sendTabs(); pushDownloads(true); }));
-  ipcMain.on('ui:newTab', fromUi((kind) => createTab(HOME, { focusOmnibox: true, kind })));
+  // every UI message carries the window it came from
+  const fromUi = (fn) => (e, ...a) => { const W = wOfUi(e.sender); if (W) return fn(W, ...a); };
+  const tabIn = (W, id) => { const t = tabs.get(id); return t && t.w === W ? t : null; };
+  ipcMain.on('ui:ready', fromUi((W) => { W.ui.send('settings', publicSettings()); sendTabs(W); pushDownloads(true); }));
+  ipcMain.on('ui:newTab', fromUi((W, kind) => createTab(HOME, { focusOmnibox: true, kind, w: W })));
+  ipcMain.on('ui:newWindow', fromUi(() => newWindow()));
   ipcMain.on('ui:panic', fromUi(() => togglePanic()));
-  ipcMain.on('ui:newTabMenu', fromUi(() => {
+  ipcMain.on('ui:newTabMenu', fromUi((W) => {
     Menu.buildFromTemplate([
-      { label: 'New tab', accelerator: 'Ctrl+T', click: () => createTab(HOME, { focusOmnibox: true }) },
-      { label: 'New private tab', accelerator: 'Ctrl+Shift+N', click: () => createTab(HOME, { focusOmnibox: true, kind: 'private' }) },
-      { label: 'New Tor tab', accelerator: 'Alt+Shift+N', click: () => createTab(HOME, { focusOmnibox: true, kind: 'tor' }) },
-    ]).popup({ window: win });
+      { label: 'New tab', accelerator: 'Ctrl+T', click: () => createTab(HOME, { focusOmnibox: true, w: W }) },
+      { label: 'New window', accelerator: 'Ctrl+N', click: () => newWindow() },
+      { label: 'New private tab', accelerator: 'Ctrl+Shift+N', click: () => createTab(HOME, { focusOmnibox: true, kind: 'private', w: W }) },
+      { label: 'New Tor tab', accelerator: 'Alt+Shift+N', click: () => createTab(HOME, { focusOmnibox: true, kind: 'tor', w: W }) },
+    ]).popup({ window: W.win });
   }));
-  ipcMain.on('ui:closeTab', fromUi((id) => closeTab(id)));
-  ipcMain.on('ui:activate', fromUi((id) => activate(id)));
-  ipcMain.on('ui:moveTab', fromUi((id, to) => moveTab(id, to)));
-  ipcMain.on('ui:tabMenu', fromUi((id) => tabMenu(id)));
-  ipcMain.on('ui:muteTab', fromUi((id) => { const t = tabs.get(id); if (t) { t.wc.setAudioMuted(!t.wc.isAudioMuted()); sendTabsSoon(); } }));
-  ipcMain.on('ui:navigate', fromUi((text) => navigate(text)));
-  ipcMain.on('ui:back', fromUi(() => { const t = activeTab(); if (t && t.wc.navigationHistory.canGoBack()) t.wc.navigationHistory.goBack(); }));
-  ipcMain.on('ui:forward', fromUi(() => { const t = activeTab(); if (t && t.wc.navigationHistory.canGoForward()) t.wc.navigationHistory.goForward(); }));
-  ipcMain.on('ui:reload', fromUi((hard) => reload(activeTab(), !!hard)));
-  ipcMain.on('ui:stop', fromUi(() => { const t = activeTab(); if (t) t.wc.stop(); }));
-  ipcMain.on('ui:home', fromUi(() => { const t = activeTab(); if (t) t.wc.loadURL(HOME).catch(() => {}); }));
-  ipcMain.on('ui:openPage', fromUi((name) => { if (PAGE_TITLES[name] && name !== 'error') openPage(name); }));
-  ipcMain.on('ui:toggleBookmark', fromUi(() => toggleBookmark()));
-  ipcMain.on('ui:toggleAdblock', fromUi(() => { setSetting('adblock', !settings.data.adblock); reload(); }));
-  ipcMain.on('ui:zoomReset', fromUi(() => zoom(0)));
-  ipcMain.on('ui:focusPage', fromUi(() => { const t = activeTab(); if (t) t.wc.focus(); }));
-  ipcMain.on('ui:find', fromUi((text, forward, isNew) => {
-    const t = activeTab();
+  ipcMain.on('ui:closeTab', fromUi((W, id) => { if (tabIn(W, id)) closeTab(id); }));
+  ipcMain.on('ui:activate', fromUi((W, id) => { if (tabIn(W, id)) activate(id); }));
+  ipcMain.on('ui:moveTab', fromUi((W, id, to) => { if (tabIn(W, id)) moveTab(id, to); }));
+  // tab drag and drop between windows: drop onto a strip, or let go outside any strip
+  ipcMain.on('ui:dropTab', fromUi((W, id, index) => { if (tabs.has(id) && Number.isFinite(index)) moveTabToWindow(id, W, index); }));
+  ipcMain.on('ui:detachTab', fromUi((W, id) => {
+    if (!tabIn(W, id)) return;
+    // let go over another window's tab strip? (its own drop handler already took it)
+    const p = screen.getCursorScreenPoint();
+    const over = allW().find((o) => o !== W && o.win.isVisible() && !o.win.isMinimized() && (() => {
+      const b = o.win.getContentBounds();
+      return p.x >= b.x && p.x < b.x + b.width && p.y >= b.y && p.y < b.y + STRIP_H;
+    })());
+    if (over) { moveTabToWindow(id, over, over.order.length); return; }
+    detachTab(id, p);
+  }));
+  ipcMain.on('ui:tabMenu', fromUi((W, id) => { if (tabIn(W, id)) tabMenu(id); }));
+  ipcMain.on('ui:muteTab', fromUi((W, id) => { const t = tabIn(W, id); if (t) toggleMute(t); }));
+  ipcMain.on('ui:navigate', fromUi((W, text) => navigate(text, activeTab(W))));
+  ipcMain.on('ui:back', fromUi((W) => { const t = activeTab(W); if (t && t.wc.navigationHistory.canGoBack()) t.wc.navigationHistory.goBack(); }));
+  ipcMain.on('ui:forward', fromUi((W) => { const t = activeTab(W); if (t && t.wc.navigationHistory.canGoForward()) t.wc.navigationHistory.goForward(); }));
+  ipcMain.on('ui:reload', fromUi((W, hard) => reload(activeTab(W), !!hard)));
+  ipcMain.on('ui:stop', fromUi((W) => { const t = activeTab(W); if (t) t.wc.stop(); }));
+  ipcMain.on('ui:home', fromUi((W) => { const t = activeTab(W); if (t) t.wc.loadURL(HOME).catch(() => {}); }));
+  ipcMain.on('ui:openPage', fromUi((W, name) => { if (PAGE_TITLES[name] && name !== 'error') openPage(name, W); }));
+  ipcMain.on('ui:toggleBookmark', fromUi((W) => toggleBookmark(activeTab(W))));
+  ipcMain.on('ui:toggleAdblock', fromUi((W) => { setSetting('adblock', !settings.data.adblock); reload(activeTab(W)); }));
+  ipcMain.on('ui:zoomReset', fromUi((W) => zoom(0, activeTab(W))));
+  ipcMain.on('ui:focusPage', fromUi((W) => { const t = activeTab(W); if (t) t.wc.focus(); }));
+  ipcMain.on('ui:find', fromUi((W, text, forward, isNew) => {
+    const t = activeTab(W);
     if (!t) return;
-    if (!text) { t.wc.stopFindInPage('clearSelection'); ui.send('found', { active: 0, total: 0 }); return; }
+    if (!text) { t.wc.stopFindInPage('clearSelection'); W.ui.send('found', { active: 0, total: 0 }); return; }
     t.wc.findInPage(text, { forward: forward !== false, findNext: !!isNew });
   }));
-  ipcMain.on('ui:findState', fromUi((open) => {
-    findOpen = !!open;
-    topInset = STRIP_H + TOOLBAR_H + (findOpen ? FIND_H : 0);
-    if (!findOpen) { const t = activeTab(); if (t) { t.wc.stopFindInPage('clearSelection'); t.wc.focus(); } }
-    layout();
+  ipcMain.on('ui:findState', fromUi((W, open) => {
+    W.findOpen = !!open;
+    W.topInset = STRIP_H + TOOLBAR_H + (W.findOpen ? FIND_H : 0);
+    if (!W.findOpen) { const t = activeTab(W); if (t) { t.wc.stopFindInPage('clearSelection'); t.wc.focus(); } }
+    layout(W);
   }));
-  ipcMain.handle('ui:autocomplete', (e, prefix) => (e.sender === ui ? autocomplete(prefix) : null));
+  // where the permission card hangs from (just under the site icon in the address bar)
+  ipcMain.on('ui:anchor', fromUi((W, r) => {
+    if (!r || !Number.isFinite(r.x) || !Number.isFinite(r.y)) return;
+    W.anchor = { x: Math.max(0, Math.round(r.x)), y: Math.max(0, Math.round(r.y)) };
+    placePrompt(W);
+  }));
+  ipcMain.handle('ui:autocomplete', (e, prefix) => (wOfUi(e.sender) ? autocomplete(prefix) : null));
+
+  // the permission card
+  const promptW = (e) => allW().find((W) => W.prompt && W.prompt.view.webContents === e.sender) || null;
+  ipcMain.on('prompt:answer', (e, id, choice) => { const W = promptW(e); if (W) answerPrompt(W, id, choice); });
+  ipcMain.on('prompt:size', (e, h) => {
+    const W = promptW(e);
+    if (!W || !Number.isFinite(h)) return;
+    W.prompt.h = Math.max(80, Math.min(400, Math.ceil(h)));
+    placePrompt(W);
+  });
 
   // internal pages (lychee://)
   ipcMain.handle('page', (e, op, ...a) => {
@@ -1449,7 +1794,7 @@ function wireIpc() {
       case 'set': return setSetting(a[0], a[1]);
       case 'go': { const url = resolveInput(a[0]); if (url && senderTab) loadInTab(senderTab, url); return !!url; }
       case 'open': { const url = resolveInput(a[0]); if (url) createTab(url, { afterId: senderTab && senderTab.id, activate: a[1] !== false, kind: senderTab && senderTab.kind }); return true; }
-      case 'newTab': createTab(HOME, { kind: a[0], focusOmnibox: true }); return true;
+      case 'newTab': createTab(HOME, { kind: a[0], focusOmnibox: true, w: senderTab && senderTab.w }); return true;
       case 'kind': return senderTab ? senderTab.kind : 'normal';
       case 'tor': return tor.status();
       case 'torStart': tor.start(); return tor.status();
@@ -1460,6 +1805,14 @@ function wireIpc() {
         const url = String(a[0] || '');
         if (!/^http:\/\//i.test(url) || !senderTab) return false;
         httpExceptions.add(hostOf(url));
+        senderTab.wc.loadURL(url).catch(() => {});
+        return true;
+      }
+      case 'allowCert': {
+        // "Go anyway" on a "connection isn't private" page: trust this host's bad certificate until restart
+        const url = String(a[0] || '');
+        if (!/^https:\/\//i.test(url) || !senderTab) return false;
+        certExceptions.add(hostOf(url));
         senderTab.wc.loadURL(url).catch(() => {});
         return true;
       }
@@ -1517,20 +1870,35 @@ async function clearData(what) {
 
 // ---------------------------------------------------------------- session
 let sessionTimer = null;
-function saveSessionSoon() { clearTimeout(sessionTimer); sessionTimer = setTimeout(saveSession, 1000); }
+function saveSessionSoon() { if (!sessionTimer) sessionTimer = setTimeout(() => { sessionTimer = null; saveSession(); }, 1000); }
 function saveSession() {
-  if (SELFTEST || !sessionStore || !order.length || !win) return;
+  if (SELFTEST || !sessionStore || !wins.size) return;
   // private/Tor tabs and the panic screen are never written to disk
-  const keep = order.filter((id) => tabs.get(id).kind === 'normal' && !(panic && panic.tabId === id));
-  if (!keep.length) { sessionStore.data = { tabs: [], active: 0 }; return; }
-  const act = keep.includes(activeId) ? activeId : panic && keep.includes(panic.prev) ? panic.prev : keep[0];
-  sessionStore.data = {
-    tabs: keep.map((id) => { const t = tabs.get(id); return realUrl(t.wc.getURL() || t.url); }),
-    active: keep.indexOf(act),
-  };
+  const windows = [];
+  for (const W of wins.values()) {
+    const keep = W.order.filter((id) => tabs.get(id).kind === 'normal' && !(panic && panic.tabId === id));
+    if (!keep.length) continue;
+    const act = keep.includes(W.activeId) ? W.activeId : panic && keep.includes(panic.prev) ? panic.prev : keep[0];
+    windows.push({
+      tabs: keep.map((id) => { const t = tabs.get(id); return realUrl(t.wc.getURL() || t.url); }),
+      active: keep.indexOf(act),
+      bounds: W.win.getNormalBounds(),
+      maximized: W.win.isMaximized(),
+      focused: W === curW(),
+    });
+  }
+  sessionStore.data = { windows };
 }
 function flushAll() {
   for (const s of [settings, history, bookmarks, stats, favicons, sessionStore, downloadStore]) if (s) s.flush();
+}
+
+// a saved window position is only reused if it is still on a connected screen
+function visibleOnScreen(b) {
+  return screen.getAllDisplays().some((d) => {
+    const a = d.workArea;
+    return b.x + 80 > a.x && b.x < a.x + a.width - 80 && b.y >= a.y - 10 && b.y < a.y + a.height - 80;
+  });
 }
 
 // ---------------------------------------------------------------- startup
@@ -1538,11 +1906,12 @@ const gotLock = SELFTEST || app.requestSingleInstanceLock();
 if (!gotLock) app.quit();
 
 app.on('second-instance', (e, argv) => {
-  if (!win) return;
-  if (win.isMinimized()) win.restore();
-  win.focus();
+  const W = curW();
+  if (!W) return;
+  if (W.win.isMinimized()) W.win.restore();
+  W.win.focus();
   const url = argv.slice(1).find((a) => /^https?:\/\//i.test(a));
-  if (url) createTab(url);
+  if (url) createTab(url, { w: W });
 });
 
 app.whenReady().then(async () => {
@@ -1557,11 +1926,12 @@ app.whenReady().then(async () => {
       label: 'Tabs',
       submenu: [
         { label: 'New Tab', accelerator: 'Cmd+T', click: () => createTab(HOME, { focusOmnibox: true }) },
+        { label: 'New Window', accelerator: 'Cmd+N', click: () => newWindow() },
         { label: 'New Private Tab', accelerator: 'Cmd+Shift+N', click: () => createTab(HOME, { kind: 'private', focusOmnibox: true }) },
         { label: 'New Tor Tab', accelerator: 'Alt+Shift+N', click: () => createTab(HOME, { kind: 'tor', focusOmnibox: true }) },
         { type: 'separator' },
-        { label: 'Reopen Closed Tab', accelerator: 'Cmd+Shift+T', click: reopenTab },
-        { label: 'Close Tab', accelerator: 'Cmd+W', click: () => closeTab(activeId) },
+        { label: 'Reopen Closed Tab', accelerator: 'Cmd+Shift+T', click: () => reopenTab() },
+        { label: 'Close Tab', accelerator: 'Cmd+W', click: () => { const W = curW(); if (W) closeTab(W.activeId); } },
       ],
     },
     { role: 'windowMenu' },
@@ -1586,35 +1956,53 @@ app.whenReady().then(async () => {
   wireIpc();
   applyDns();
   await applyProxy();
-  createWindow();
   applyDisguise();
   updater = new Updater({
     portable: IS_PORTABLE, exeDir: EXE_DIR,
-    onChange: (st) => { if (ui) ui.send('update', st); broadcastPages('update', st); },
+    onChange: (st) => { sendAllUi('update', st); broadcastPages('update', st); },
   });
   if (!SELFTEST) updater.start(settings.data.autoUpdate);
 
   const extra = process.argv.slice(1).filter((a) => /^https?:\/\//i.test(a));
   const saved = sessionStore.data;
-  if (!SELFTEST && settings.data.restoreTabs && saved.tabs && saved.tabs.length) {
-    for (const u of saved.tabs) createTab(u, { activate: false });
-    activate(order[Math.max(0, Math.min(saved.active, order.length - 1))], { keepFocus: true });
-  } else if (!extra.length) {
-    createTab(HOME, { focusOmnibox: true });
+  // older versions saved one window as { tabs, active }
+  const savedWins = Array.isArray(saved.windows) ? saved.windows : saved.tabs && saved.tabs.length ? [{ tabs: saved.tabs, active: saved.active }] : [];
+  const restore = !SELFTEST && settings.data.restoreTabs ? savedWins.filter((w) => w.tabs && w.tabs.length) : [];
+  let focusW = null;
+  for (const sw of restore) {
+    const b = sw.bounds && visibleOnScreen(sw.bounds) ? sw.bounds : null;
+    const W = createWindow({ bounds: b || undefined });
+    if (sw.maximized) W.win.once('ready-to-show', () => W.win.maximize());
+    for (const u of sw.tabs) createTab(u, { activate: false, w: W });
+    activate(W.order[Math.max(0, Math.min(sw.active || 0, W.order.length - 1))], { keepFocus: true });
+    if (sw.focused) focusW = W;
   }
-  for (const u of extra) createTab(u);
+  if (!wins.size) {
+    const W = createWindow();
+    if (!extra.length) createTab(HOME, { focusOmnibox: true, w: W });
+  }
+  if (focusW && !SELFTEST) focusW.win.once('ready-to-show', () => focusW.win.focus());
+  for (const u of extra) createTab(u, { w: focusW || curW() });
 
   initAdblock();
   if (SELFTEST) {
     require('./selftest')({
-      createTab, closeTab, tabs, order, ui: () => ui, win: () => win, resolveInput, autocomplete, activate, setSetting,
+      createTab, closeTab, tabs, get order() { const W = curW(); return W ? W.order : []; }, ui: () => curW().ui, win: () => curW().win,
+      resolveInput, autocomplete, activate, setSetting, activeId: () => (curW() || {}).activeId,
+      wins: () => allW(), curW, createWindow, newWindow, moveTabToWindow, detachTab, prompts: () => pendingPerms,
       DNS_PROVIDERS, SHOTS_DIR, togglePanic, panic: () => panic, history: () => history.data, tor, safety, settings: () => settings.data, Themes,
     });
   }
 });
 
+// bad certificates fail the load (-2xx error page) unless the user pressed "Go anyway" for that host
+app.on('certificate-error', (e, wc, url, error, cert, cb) => {
+  if (certExceptions.has(hostOf(url))) { e.preventDefault(); cb(true); }
+  else cb(false);
+});
+
 app.on('window-all-closed', () => { flushAll(); app.quit(); });
-app.on('before-quit', () => { saveSession(); flushAll(); });
+app.on('before-quit', () => { saveSession(); flushAll(); quitting = true; });
 app.on('will-quit', (e) => {
   tor.stop();
   if (updater) updater.applyOnQuit();

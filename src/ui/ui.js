@@ -71,37 +71,72 @@ function makeTab(id) {
   el.querySelector('.close').addEventListener('click', (e) => { e.stopPropagation(); browser.send('ui:closeTab', id); });
   el.querySelector('.audio').addEventListener('click', (e) => { e.stopPropagation(); browser.send('ui:muteTab', id); });
 
+  // drag: the tab's id travels in a Lychee-only data type, so another Lychee window's strip can take it.
+  // Let go anywhere that isn't a tab strip and the tab becomes its own window (main decides).
   el.addEventListener('dragstart', (e) => {
     dragId = id;
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', '');
+    e.dataTransfer.setData(TAB_MIME, String(id));
     el.classList.add('dragging');
   });
-  el.addEventListener('dragend', () => {
-    dragId = null;
+  el.addEventListener('dragend', (e) => {
     el.classList.remove('dragging');
-    tabsEl.querySelectorAll('.drop-before,.drop-after').forEach((x) => x.classList.remove('drop-before', 'drop-after'));
-  });
-  el.addEventListener('dragover', (e) => {
-    if (dragId == null || dragId === id) return;
-    e.preventDefault();
-    const r = el.getBoundingClientRect();
-    const after = e.clientX > r.left + r.width / 2;
-    el.classList.toggle('drop-after', after);
-    el.classList.toggle('drop-before', !after);
-  });
-  el.addEventListener('dragleave', () => el.classList.remove('drop-before', 'drop-after'));
-  el.addEventListener('drop', (e) => {
-    e.preventDefault();
-    if (dragId == null || dragId === id) return;
-    const after = el.classList.contains('drop-after');
-    const from = state.tabs.findIndex((t) => t.id === dragId);
-    let to = state.tabs.findIndex((t) => t.id === id) + (after ? 1 : 0);
-    if (from < to) to--;
-    browser.send('ui:moveTab', dragId, to);
+    hideDropMark();
+    const dropped = e.dataTransfer.dropEffect !== 'none';
+    dragId = null;
+    if (!dropped) browser.send('ui:detachTab', id);
   });
   return el;
 }
+
+// ---- dropping tabs onto this window's strip (from this window or another one)
+const TAB_MIME = 'application/x-lychee-tab';
+const stripEl = $('#strip');
+const dropMark = document.createElement('div');
+dropMark.id = 'drop-mark';
+dropMark.hidden = true;
+document.body.append(dropMark);
+function hideDropMark() { dropMark.hidden = true; }
+const isTabDrag = (e) => [...(e.dataTransfer.types || [])].includes(TAB_MIME);
+
+// index in this strip where a drop at clientX would land, and the x to draw the marker at
+function dropSlot(clientX) {
+  const els = [...tabsEl.children];
+  for (let i = 0; i < els.length; i++) {
+    const r = els[i].getBoundingClientRect();
+    if (clientX < r.left + r.width / 2) return { index: i, x: r.left - 2 };
+  }
+  const last = els[els.length - 1];
+  return { index: els.length, x: last ? last.getBoundingClientRect().right + 1 : tabsEl.getBoundingClientRect().left };
+}
+
+stripEl.addEventListener('dragover', (e) => {
+  if (!isTabDrag(e)) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const s = dropSlot(e.clientX);
+  dropMark.style.left = Math.round(s.x) + 'px';
+  dropMark.hidden = false;
+});
+stripEl.addEventListener('dragleave', (e) => {
+  if (!stripEl.contains(e.relatedTarget)) hideDropMark();
+});
+stripEl.addEventListener('drop', (e) => {
+  if (!isTabDrag(e)) return;
+  e.preventDefault();
+  hideDropMark();
+  const id = Number(e.dataTransfer.getData(TAB_MIME));
+  if (!id) return;
+  let { index } = dropSlot(e.clientX);
+  const from = state.tabs.findIndex((t) => t.id === id);
+  if (from >= 0) {
+    // a tab from this window: reorder
+    if (from < index) index--;
+    if (index !== from) browser.send('ui:moveTab', id, index);
+  } else {
+    browser.send('ui:dropTab', id, index); // a tab from another window moves in here
+  }
+});
 
 function favMarkup(t) {
   if (t.loading && !t.page) return { key: 'loading', html: '<span class="spinner"></span>', box: false };
@@ -337,8 +372,18 @@ browser.on('found', ({ active: a, total }) => {
 
 // ---------------------------------------------------------------- wiring
 browser.on('tabs', (s) => { state = s; renderTabs(); renderToolbar(); });
+// tell main where the permission card should hang from: just under the site icon in the address bar
+function reportAnchor() {
+  const r = $('#omni-icon').getBoundingClientRect();
+  const tb = $('#toolbar').getBoundingClientRect();
+  browser.send('ui:anchor', { x: r.left - 18, y: tb.bottom - 6 });
+}
+window.addEventListener('resize', reportAnchor);
+
 browser.on('settings', (s) => {
   settings = s;
+  document.body.classList.toggle('rail-hidden', !!s.railHidden);
+  requestAnimationFrame(reportAnchor);
   applyTheme(s);
   applyAccent(s.accent);
   const en = s.engines[s.searchEngine] || 'the web';
