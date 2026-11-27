@@ -26,10 +26,12 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* background photo, a bit oversized so it can drift with the mouse */
+/* background video, a bit oversized so it can drift with the mouse */
 #bg {
-  position: fixed; inset: -6% -6%;
-  background: url(assets/bg.webp) center / cover no-repeat;
+  position: fixed; top: -6%; left: -6%;
+  width: 112%; height: 112%;
+  object-fit: cover;
+  pointer-events: none;
   transition: transform .9s cubic-bezier(.2, .7, .2, 1);
   will-change: transform;
 }
@@ -85,7 +87,7 @@ h3 {
 </style>
 </head>
 <body>
-<div id="bg"></div>
+<video id="bg" src="assets/bg.mp4" autoplay muted loop playsinline disablepictureinpicture preload="auto"></video>
 <canvas id="aurora"></canvas>
 
 <main>
