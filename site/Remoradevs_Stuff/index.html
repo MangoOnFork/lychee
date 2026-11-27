@@ -13,16 +13,20 @@
 
 :root {
   --card: rgba(27, 27, 27, .5);
+  --card-solid: rgba(22, 22, 22, .62);
+  --line: rgba(255, 255, 255, .08);
   --text: #fff;
+  --muted: rgba(255, 255, 255, .62);
   --bg: #080808;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; }
+html { scroll-behavior: smooth; }
+html, body { margin: 0; }
 body {
   background: var(--bg);
   color: var(--text);
   font-family: "Satoshi", system-ui, sans-serif;
-  overflow: hidden;
+  overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -37,12 +41,17 @@ body {
 }
 /* white aurora haze */
 #aurora { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+/* darkens the video as you scroll so the text stays readable */
+#shade { position: fixed; inset: 0; background: #050505; opacity: 0; pointer-events: none; }
 
-main {
-  position: relative; z-index: 1;
-  min-height: 100%;
+main { position: relative; z-index: 1; }
+
+/* ---------- first screen: the profile card ---------- */
+.hero {
+  min-height: 100vh; min-height: 100svh;
   display: grid; place-items: center;
   padding: 16px;
+  position: relative;
 }
 .card {
   width: min(640px, 100%);
@@ -75,13 +84,165 @@ h3 {
   line-height: 1.35;
 }
 
+.scroll-hint {
+  position: absolute; left: 50%; bottom: 22px; translate: -50% 0;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  color: rgba(255, 255, 255, .75); text-decoration: none;
+  font-size: 13px; font-weight: 500; letter-spacing: .12em; text-transform: lowercase;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, .6);
+  animation: fade 1s .6s ease both;
+}
+.scroll-hint svg { width: 22px; height: 22px; animation: bob 1.8s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(5px); } }
+
+/* ---------- everything below ---------- */
+.wrap { width: min(860px, 100%); margin: 0 auto; padding: 0 16px 80px; display: grid; gap: 22px; }
+
+.panel {
+  border-radius: 20px;
+  background: var(--card-solid);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--line);
+  padding: 28px;
+}
+.panel h2 {
+  margin: 0 0 14px;
+  font-size: 24px; font-weight: 700; letter-spacing: -.01em;
+  display: flex; align-items: center; gap: 10px;
+}
+.panel h2 small { font-size: 14px; font-weight: 500; color: var(--muted); }
+.panel p { margin: 0; color: rgba(255, 255, 255, .84); font-size: 16.5px; line-height: 1.6; }
+.panel p + p { margin-top: 10px; }
+
+/* reveal on scroll */
+.reveal { opacity: 0; transform: translateY(24px); transition: opacity .7s ease, transform .7s cubic-bezier(.2, .7, .2, 1); }
+.reveal.in { opacity: 1; transform: none; }
+
+/* stats row */
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 20px; }
+.stat {
+  border-radius: 14px; border: 1px solid var(--line);
+  background: rgba(255, 255, 255, .035);
+  padding: 14px 12px; text-align: center;
+}
+.stat b { display: block; font-size: 28px; font-weight: 700; line-height: 1.1; }
+.stat span { font-size: 13px; color: var(--muted); }
+
+/* project filters */
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.filters button {
+  font: inherit; font-size: 14px; font-weight: 500;
+  color: var(--muted);
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: background .2s, color .2s, border-color .2s;
+}
+.filters button:hover { color: #fff; }
+.filters button[aria-pressed="true"] { background: #fff; color: #111; border-color: #fff; }
+
+/* project cards */
+.projects { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.project {
+  border-radius: 16px; border: 1px solid var(--line);
+  background: rgba(255, 255, 255, .035);
+  padding: 18px;
+  display: flex; flex-direction: column; gap: 8px;
+  transition: transform .25s ease, background .25s ease, border-color .25s ease;
+  color: inherit; text-decoration: none;
+}
+.project:hover { transform: translateY(-3px); background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .16); }
+.project[hidden] { display: none; }
+.project-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.project h4 { margin: 0; font-size: 18px; font-weight: 700; }
+.project p { margin: 0; font-size: 14.5px; line-height: 1.5; color: rgba(255, 255, 255, .76); flex: 1; }
+.status {
+  flex: none;
+  font-size: 12px; font-weight: 500;
+  border-radius: 999px; padding: 3px 9px;
+  border: 1px solid var(--line); color: var(--muted);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.status.live { color: #8ff0a4; border-color: rgba(143, 240, 164, .25); }
+.status.beta { color: #ffd479; border-color: rgba(255, 212, 121, .25); }
+.status.dev { color: #b8c4ff; border-color: rgba(184, 196, 255, .22); }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tags span {
+  font-size: 12px; font-weight: 500; color: rgba(255, 255, 255, .7);
+  background: rgba(255, 255, 255, .06); border-radius: 6px; padding: 3px 8px;
+}
+.project .go { font-size: 13px; font-weight: 500; color: #fff; opacity: .8; }
+
+/* skills */
+.skills { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px 24px; }
+.skill h5 { margin: 0 0 8px; font-size: 13px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.chips span {
+  font-size: 14px; font-weight: 500;
+  border: 1px solid var(--line); background: rgba(255, 255, 255, .045);
+  border-radius: 999px; padding: 6px 12px;
+}
+
+/* ---------- click to enter (browsers only allow sound after a click) ---------- */
+#enter {
+  position: fixed; inset: 0; z-index: 10;
+  display: grid; place-items: center;
+  background: rgba(5, 5, 5, .55);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  border: 0; width: 100%; padding: 0;
+  font: inherit; color: #fff; cursor: pointer;
+  transition: opacity .8s ease, visibility .8s;
+}
+#enter span { font-size: 20px; font-weight: 500; letter-spacing: .04em; animation: pulse 2.2s ease-in-out infinite; text-shadow: 0 0 14px rgba(255, 255, 255, .5); }
+@keyframes pulse { 50% { opacity: .45; } }
+body.entered #enter { opacity: 0; visibility: hidden; }
+body:not(.entered) { overflow: hidden; }
+body:not(.entered) main { visibility: hidden; }
+
+/* volume control */
+#vol {
+  position: fixed; top: 16px; left: 16px; z-index: 5;
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px 6px 6px;
+  border-radius: 999px;
+  background: rgba(20, 20, 20, .55);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--line);
+  opacity: 0; transition: opacity .6s ease .4s;
+}
+body.entered #vol { opacity: 1; }
+#vol button {
+  width: 30px; height: 30px; border-radius: 50%;
+  border: 0; background: transparent; color: #fff; cursor: pointer;
+  display: grid; place-items: center; padding: 0;
+}
+#vol svg { width: 18px; height: 18px; }
+#vol input { width: 90px; accent-color: #fff; cursor: pointer; }
+
+.foot { text-align: center; color: var(--muted); font-size: 13px; padding-top: 6px; }
+.foot a { color: inherit; }
+
+@media (max-width: 640px) {
+  .projects, .skills { grid-template-columns: 1fr; }
+  .panel { padding: 22px 18px; }
+  .stat b { font-size: 23px; }
+}
 @media (max-width: 480px) {
   h1 { font-size: 32px; }
   h3 { font-size: 17px; }
   .avatar { width: 100px; height: 100px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .card { animation: none; }
+  html { scroll-behavior: auto; }
+  .card, .scroll-hint { animation: none; }
+  .scroll-hint svg { animation: none; }
+  .reveal { opacity: 1; transform: none; transition: none; }
   #bg { transition: none; }
 }
 </style>
@@ -89,18 +250,158 @@ h3 {
 <body>
 <video id="bg" src="assets/bg.mp4" autoplay muted loop playsinline disablepictureinpicture preload="auto"></video>
 <canvas id="aurora"></canvas>
+<div id="shade"></div>
+<audio id="music" src="assets/music.mp3" loop preload="auto"></audio>
+
+<button id="enter" type="button"><span>click to enter...</span></button>
+
+<div id="vol">
+  <button type="button" id="mute" aria-label="Mute music">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path id="wave" d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/><path id="cross" d="m16 9 6 6m0-6-6 6" style="display:none"/></svg>
+  </button>
+  <input type="range" id="volume" min="0" max="100" value="20" aria-label="Music volume">
+</div>
 
 <main>
-  <section class="card">
-    <img class="avatar" src="assets/avatar.webp" alt="remoradev">
-    <h1>remoradev</h1>
-    <h3>Game Dev Of 3 Years</h3>
+  <section class="hero">
+    <div class="card">
+      <img class="avatar" src="assets/avatar.webp" alt="remoradev">
+      <h1>remoradev</h1>
+      <h3>Game Dev Of 3 Years</h3>
+    </div>
+    <a class="scroll-hint" href="#about" aria-label="Scroll down to see more">
+      more about me
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+    </a>
   </section>
+
+  <div class="wrap">
+    <section class="panel reveal" id="about">
+      <h2>About me</h2>
+      <p>I'm remoradev, a game dev of 3 years. I mostly make VR games and co-op chaos to play with my friends, plus mods for games I love and the odd tool or web toy when I need one.</p>
+      <p>I do pretty much everything myself: code, multiplayer, 3D models, rigging, sound and the website you're on right now.</p>
+      <div class="stats">
+        <div class="stat"><b>3</b><span>years making games</span></div>
+        <div class="stat"><b id="project-count">0</b><span>projects below</span></div>
+        <div class="stat"><b>VR</b><span>Quest + PC</span></div>
+      </div>
+    </section>
+
+    <section class="panel reveal" id="projects">
+      <h2>Projects <small id="shown-count"></small></h2>
+      <div class="filters" role="group" aria-label="Filter projects"></div>
+      <div class="projects"></div>
+    </section>
+
+    <section class="panel reveal" id="experience">
+      <h2>Experience</h2>
+      <div class="skills">
+        <div class="skill">
+          <h5>Engines</h5>
+          <div class="chips"><span>Unity (C#)</span><span>Unreal Engine 5</span><span>Three.js</span><span>GDevelop</span></div>
+        </div>
+        <div class="skill">
+          <h5>Multiplayer</h5>
+          <div class="chips"><span>Photon PUN 2 + Voice</span><span>Netcode for GameObjects</span><span>Epic Online Services</span><span>Steam relay</span><span>WebRTC</span></div>
+        </div>
+        <div class="skill">
+          <h5>VR</h5>
+          <div class="chips"><span>Quest standalone</span><span>PCVR</span><span>Physics hands</span><span>Gorilla-style movement</span><span>Arm IK</span></div>
+        </div>
+        <div class="skill">
+          <h5>Art &amp; audio</h5>
+          <div class="chips"><span>Blender</span><span>Substance Painter</span><span>PSX / low-poly</span><span>Rigging &amp; animation</span><span>Sound design</span></div>
+        </div>
+        <div class="skill">
+          <h5>Modding</h5>
+          <div class="chips"><span>BepInEx</span><span>MelonLoader</span><span>Harmony</span><span>Fabric</span><span>Shader packs</span></div>
+        </div>
+        <div class="skill">
+          <h5>Apps &amp; web</h5>
+          <div class="chips"><span>Electron</span><span>WPF / .NET</span><span>JavaScript</span><span>HTML / CSS</span><span>Python</span></div>
+        </div>
+      </div>
+    </section>
+
+    <p class="foot"><a href="#top" id="to-top">back to top</a></p>
+  </div>
 </main>
 
 <script>
-// Background drifts gently against the mouse.
+// ---------- Music: starts quiet once the visitor clicks in ----------
+const music = document.getElementById('music');
+const volume = document.getElementById('volume');
+const muteBtn = document.getElementById('mute');
+let lastVol = +volume.value;
+function setVol(v) {
+  music.volume = v / 100;
+  volume.value = v;
+  const off = v === 0;
+  document.getElementById('wave').style.display = off ? 'none' : '';
+  document.getElementById('cross').style.display = off ? '' : 'none';
+  muteBtn.setAttribute('aria-label', off ? 'Unmute music' : 'Mute music');
+}
+setVol(lastVol);
+volume.addEventListener('input', () => { setVol(+volume.value); if (+volume.value) lastVol = +volume.value; });
+muteBtn.addEventListener('click', () => setVol(music.volume > 0 ? 0 : (lastVol || 20)));
+
+document.getElementById('enter').addEventListener('click', () => {
+  document.body.classList.add('entered');
+  music.play().catch(() => {});
+});
+
+// ---------- Projects: edit this list ----------
+// status: 'live' | 'beta' | 'dev'   kind: 'vr' | 'game' | 'mod' | 'app'
+const PROJECTS = [
+  { name: 'Cat-Acombs', kind: 'game', status: 'dev', text: 'Co-op PSX horror friendslop where you play as cats exploring the catacombs. Headed to Steam.', tags: ['Unity 6', 'URP', 'Multiplayer', 'PC + VR'] },
+  { name: 'Mankies', kind: 'vr', status: 'dev', text: 'Gorilla-style VR game with rooms, proximity voice and a monster that hunts you down.', tags: ['Unity', 'Quest + PC', 'EOS', 'Voice'] },
+  { name: 'ApeBox', kind: 'vr', status: 'dev', text: 'Physics VR sandbox: physgun, spawn gun, golf cart, flashbangs and a lot of ragdolls.', tags: ['Unity', 'PCVR', 'Physics hands'] },
+  { name: 'ProCon', kind: 'mod', status: 'beta', text: 'Player-hosted online multiplayer for Gang Beasts over Steam relay.', tags: ['Gang Beasts', 'MelonLoader', 'Thunderstore'] },
+  { name: 'Lychee', kind: 'app', status: 'live', url: 'https://browserlychee.com/', text: 'My own desktop web browser, with themes, ad blocking, private and Tor tabs, and auto-update.', tags: ['Electron', 'Windows + Mac'] },
+];
+const KINDS = [['all', 'All'], ['vr', 'VR'], ['game', 'Games'], ['mod', 'Mods'], ['app', 'Apps']];
+const STATUS = { live: 'Released', beta: 'Beta', dev: 'In development' };
+
+const grid = document.querySelector('.projects');
+const filters = document.querySelector('.filters');
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+grid.innerHTML = PROJECTS.map((p) => {
+  const tag = p.url ? 'a' : 'div';
+  const href = p.url ? ` href="${esc(p.url)}" target="_blank" rel="noopener"` : '';
+  return `<${tag} class="project" data-kind="${p.kind}"${href}>
+    <div class="project-top"><h4>${esc(p.name)}</h4><span class="status ${p.status}">${STATUS[p.status]}</span></div>
+    <p>${esc(p.text)}</p>
+    <div class="tags">${p.tags.map((t) => `<span>${esc(t)}</span>`).join('')}</div>
+    ${p.url ? '<span class="go">Visit →</span>' : ''}
+  </${tag}>`;
+}).join('');
+
+filters.innerHTML = KINDS
+  .filter(([k]) => k === 'all' || PROJECTS.some((p) => p.kind === k))
+  .map(([k, label]) => `<button type="button" data-kind="${k}" aria-pressed="${k === 'all'}">${label}</button>`).join('');
+
+function showKind(kind) {
+  let n = 0;
+  for (const el of grid.children) { const on = kind === 'all' || el.dataset.kind === kind; el.hidden = !on; if (on) n++; }
+  for (const b of filters.children) b.setAttribute('aria-pressed', b.dataset.kind === kind);
+  document.getElementById('shown-count').textContent = `${n}`;
+}
+filters.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) showKind(b.dataset.kind); });
+showKind('all');
+document.getElementById('project-count').textContent = PROJECTS.length;
+
+document.getElementById('to-top').addEventListener('click', (e) => { e.preventDefault(); scrollTo({ top: 0 }); });
+
+// Reveal panels as they scroll into view.
+const io = new IntersectionObserver((entries) => {
+  for (const en of entries) if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); }
+}, { threshold: .12 });
+document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+
+// Background drifts gently against the mouse; the video darkens as you scroll.
 const bg = document.getElementById('bg');
+const shade = document.getElementById('shade');
 const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
 if (!still) {
   addEventListener('pointermove', (e) => {
@@ -109,6 +410,8 @@ if (!still) {
     bg.style.transform = `translate(${x}px, ${y}px)`;
   });
 }
+function onScroll() { shade.style.opacity = Math.min(scrollY / innerHeight, 1) * .55; }
+addEventListener('scroll', onScroll, { passive: true }); onScroll();
 
 // Aurora: soft white bands that slowly ripple across the top of the page.
 const cv = document.getElementById('aurora');
